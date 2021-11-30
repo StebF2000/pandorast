@@ -10,6 +10,9 @@
 7. Make good OpenSource code
 
 ## Resources
+- Fastware
+  - https://www.youtube.com/watch?v=o4-CwDo2zpg
+
 - Build Rust Docker containers efficiently
   - https://www.lpalmieri.com/posts/fast-rust-docker-builds/
 
@@ -29,3 +32,6 @@
 
 - Profiling Rust
   - https://blog.anp.lol/rust/2016/07/24/profiling-rust-perf-flamegraph/
+
+- Post-mortem ripgrep
+  - https://gist.github.com/jFransham/369a86eff00e5f280ed25121454acec1#number-one-optimization-tip-dont
