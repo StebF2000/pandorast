@@ -2,3 +2,4 @@
 .DS_store
 *.gz
 Cargo.lock
+config.*
