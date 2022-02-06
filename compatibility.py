@@ -12,14 +12,21 @@ def numerical(string: str):
     but this works and it's for the shake of retrocompatibility
     """
 
-    try:
-        return int(string)
-    
-    except:
+    if string == "true":
+        return True
+
+    elif string == "false":
+        return False
+
+    else:
         try:
-            return float(string)
+            return int(string)
+        
         except:
-            return string
+            try:
+                return float(string)
+            except:
+                return string
 
 
 def config_converter(path: str) -> None:

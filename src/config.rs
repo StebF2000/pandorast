@@ -1,49 +1,116 @@
-use serde::{Deserialize};
-mod agent;
+pub mod config {
 
-#[derive(Debug, Deserialize)]
-struct Output {
-    results_dir: String,
-    results_file: String,
-    logs_dir: String,
-    logs_console: bool,
-    instrumentation: bool,
-}
+    use crate::model::model;
+    use serde::Deserialize;
+    use std::fs::File;
+    use std::io::Write;
 
-#[derive(Debug, Deserialize)]
-struct Simulation {
-    steps: u64,
-    resolution: u64,
-    height: u64,
-    width: u64,
-    agents: u64,
-    counters: u64,
-    match_start: f32,
-    seconds_step: f32,
-    distribute_agents: bool,
-}
+    #[derive(Debug, Deserialize)]
+    struct Output {
+        results_dir: String,
+        results_file: String,
+        logs_file: String,
+    }
 
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    outputs: Output,
-    simulation: Simulation,
-    agents: agent::Agent,
-}
+    #[derive(Debug, Deserialize)]
+    struct Logs {
+        pub print_in_console: bool,
+        pub print_instrumentation: bool,
+    }
 
-pub fn load_configuration(path: String) -> Config {
+    #[derive(Debug, Deserialize)]
+    pub struct Size {
+        height: u32,
+        width: u32,
+    }
 
-    // Open config file
-    let data = match std::fs::read_to_string(path) {
-        Ok(file) => file,
-        Err(error) => panic!("Problem opening the file: {:?}", error),
-    };
+    #[derive(Debug, Deserialize)]
+    struct Simulation {
+        num_agents: u32,
+        num_counters: u8,
+    }
 
-    // Deserialize config file into config struct
-    let value: Config = match toml::from_str(&data) {
-        Ok(file) => file,
-        Err(error) => panic!("Problem opening the file: {:?}", error),
-    };
+    #[derive(Debug, Deserialize)]
+    pub struct Parameters {
+        // General engine configuration
+        output: Output,
+        logs: Logs,
+        size: Size,
+        input_data: Simulation,
 
-    return value
+        // Model-specific configuration
+        agent_data: model::AgentStats,
+        coefficients: model::Coeffs,
+        topology: model::Topology,
+        venue_tags: model::Venue,
+        match_timings: model::Match,
+    }
 
+    impl Parameters {
+        /// Returns a Parameters object
+        ///
+        /// # Arguments
+        /// * `path` - A string pointing to the `.toml` configuration file
+        ///
+
+        pub fn load_configuration(path: String) -> Parameters {
+            // Open config file
+            let data = match std::fs::read_to_string(path) {
+                Ok(file) => file,
+                Err(error) => panic!("Problem opening the file: {:?}", error),
+            };
+
+            // Deserialize config file into config struct
+            let value = match toml::from_str(&data) {
+                Ok(file) => file,
+                Err(error) => panic!("Problem opening the file: {:?}", error),
+            };
+
+            return value;
+        }
+
+        // Grid size for computation
+        pub fn get_world_size(&self) -> (u32, u32) {
+            (self.size.height, self.size.width)
+        }
+
+        // Consolidate results
+        pub fn write_results(&self, data: String) {
+            let mut file =
+                File::create(&self.output.results_file).expect("[ERROR] Unable to create file");
+            file.write_all(data.as_bytes())
+                .expect("[Error] Unable to write data");
+        }
+
+        // Display logs info on terminal and write down to log historial
+        pub fn logs(&self, info: String) {
+            if self.logs.print_in_console {
+                println!("{info}");
+            }
+
+            let mut file =
+                File::create(&self.output.logs_file).expect("[ERROR] Unable to create file");
+            file.write_all(info.as_bytes())
+                .expect("[Error] Unable to write data");
+        }
+
+        // Agent characteristics for simulation
+        pub fn get_agent_info(&self) -> model::AgentStats {
+            self.agent_data
+        }
+
+        // Agent randomization coefficients
+        pub fn get_agent_coeffs(&self) -> model::Coeffs {
+            self.coefficients
+        }
+
+        // Match information for simulation
+        pub fn get_match_info(&self) -> model::Match {
+            self.match_timings
+        }
+
+        pub fn total_agents(&self) -> u32 {
+            self.input_data.num_agents
+        }
+    }
 }
