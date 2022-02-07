@@ -1,6 +1,6 @@
 pub mod config {
 
-    use crate::model::model;
+    use crate::model::model::{self, Topology};
     use serde::Deserialize;
     use std::fs::File;
     use std::io::Write;
@@ -19,7 +19,7 @@ pub mod config {
     }
 
     #[derive(Debug, Deserialize)]
-    pub struct Size {
+    struct Size {
         height: u64,
         width: u64,
     }
@@ -42,7 +42,7 @@ pub mod config {
         agent_data: model::AgentStats,
         coefficients: model::Coeffs,
         pub topology: model::Topology,
-        venue_tags: model::Venue,
+        pub venue_tags: model::Venue,
         match_timings: model::Match,
     }
 
