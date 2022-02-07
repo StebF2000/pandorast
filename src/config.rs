@@ -14,20 +14,20 @@ pub mod config {
 
     #[derive(Debug, Deserialize)]
     struct Logs {
-        pub print_in_console: bool,
-        pub print_instrumentation: bool,
+        print_in_console: bool,
+        print_instrumentation: bool,
     }
 
     #[derive(Debug, Deserialize)]
     pub struct Size {
-        height: u32,
-        width: u32,
+        height: u64,
+        width: u64,
     }
 
     #[derive(Debug, Deserialize)]
     struct Simulation {
-        num_agents: u32,
-        num_counters: u8,
+        num_agents: u64,
+        num_counters: u32,
     }
 
     #[derive(Debug, Deserialize)]
@@ -41,7 +41,7 @@ pub mod config {
         // Model-specific configuration
         agent_data: model::AgentStats,
         coefficients: model::Coeffs,
-        topology: model::Topology,
+        pub topology: model::Topology,
         venue_tags: model::Venue,
         match_timings: model::Match,
     }
@@ -70,7 +70,7 @@ pub mod config {
         }
 
         // Grid size for computation
-        pub fn get_world_size(&self) -> (u32, u32) {
+        pub fn get_world_size(&self) -> (u64, u64) {
             (self.size.height, self.size.width)
         }
 
@@ -109,7 +109,7 @@ pub mod config {
             self.match_timings
         }
 
-        pub fn total_agents(&self) -> u32 {
+        pub fn total_agents(&self) -> u64 {
             self.input_data.num_agents
         }
     }

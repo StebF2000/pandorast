@@ -1,6 +1,7 @@
 /target
 .DS_Store
 *.gz
-Cargo.lock
 config.*
 resources/
+.vscode/
+Cargo.lock

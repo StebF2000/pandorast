@@ -33,16 +33,16 @@ pub mod model {
 
     #[derive(Debug, Deserialize)]
     pub struct Topology {
-        layout_pb: String,
-        layout_p05: String,
-        layout_p1: String,
-        layout_p15: String,
-        layout_p2: String,
-        layout_p3: String,
-        layout_p35: String,
-        layout_p4: String,
-        layout_p5: String,
-        layout_s1: String,
+        pub layout_pb: String,
+        pub layout_p05: String,
+        pub layout_p1: String,
+        pub layout_p15: String,
+        pub layout_p2: String,
+        pub layout_p3: String,
+        pub layout_p35: String,
+        pub layout_p4: String,
+        pub layout_p5: String,
+        pub layout_s1: String,
     }
 
     #[derive(Debug, Deserialize)]
