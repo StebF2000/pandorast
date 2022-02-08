@@ -1,7 +1,6 @@
 pub mod model {
 
     use std::collections::HashMap;
-    use std::error::Error;
     use serde::{Deserialize};
 
     #[derive(Debug, Deserialize, Clone, Copy)]
@@ -85,14 +84,15 @@ pub mod model {
         y: u32,
     }
 
-    pub fn load_gates (path: String) -> Result<HashMap<String, Vec<usize>>, Box<dyn Error>>{
+    /// HashMap of initial points (Gates). Key => usize position on matrix PB
+    pub fn load_gates (path: String) -> HashMap<String, Vec<usize>>{
 
         let mut gates: HashMap<String, Vec<usize>> = HashMap::new();
 
-        let mut reader = csv::Reader::from_path(path)?;
+        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found");
 
         for result in reader.deserialize() {
-            let record: Gate = result?;
+            let record: Gate = result.expect("[ERROR] Incorrect gate format");
             
             match gates.get_mut(&record.gate) {
                 Some(gate) => {
@@ -104,8 +104,46 @@ pub mod model {
             }
         }
 
-        Ok(gates)
+        return gates
     }
-}
 
-pub mod world {}
+    #[derive(Debug, Deserialize)]
+    struct Mouth {
+        mouth: String,
+        layer: String,
+        x: u32,
+        y: u32,
+    }
+
+    /// HashMap of Hashmap. First by layer then by  mouth. Key => usize position in matrix
+    pub fn load_mouths (path: String) -> HashMap<String, HashMap<String, Vec<usize>>> {
+        
+        let mut mouths: HashMap<String, HashMap<String, Vec<usize>>> = HashMap::new();
+
+        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Mouths file not found");
+
+        for result in reader.deserialize() {
+            let record: Mouth = result.expect("[ERROR] Incorrect mouth format");
+
+            match mouths.get_mut(&record.layer) {   // Layer key on HashMap exists
+                Some(layer) => {    // Mouth is present in HashMap. Only position pushed
+                    match layer.get_mut(&record.mouth) {
+                        Some(mouth) => {
+                            mouth.push((627 * record.x + record.y) as usize);
+                        },
+                        None => {   // Mouth not in HashMap. Gate vector position is created
+                            layer.insert(record.mouth, vec![(627 * record.x + record.y) as usize]);
+                        }
+                    }
+                },
+                None => {   // Layer key on HashMap does not exist. All has to be created
+                    mouths.insert(record.layer, HashMap::from([(record.mouth, vec![(627 * record.x + record.y) as usize])]));
+                }
+            }
+        }
+
+        return mouths
+        
+    }
+
+}

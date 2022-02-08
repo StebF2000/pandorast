@@ -35,3 +35,6 @@
 
 - Post-mortem ripgrep
   - https://gist.github.com/jFransham/369a86eff00e5f280ed25121454acec1#number-one-optimization-tip-dont
+
+- Vec vs HashMap for lookup
+    - https://gist.github.com/daboross/976978d8200caf86e02acb6805961195
