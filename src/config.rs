@@ -1,6 +1,6 @@
 pub mod config {
 
-    use crate::model::model::{self, Topology};
+    use crate::model::model;
     use serde::Deserialize;
     use std::fs::File;
     use std::io::Write;

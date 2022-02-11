@@ -1,7 +1,10 @@
 pub mod model {
 
+    use rand::{Rng, distributions::Uniform};
+    use rayon::vec;
+    use serde::Deserialize;
     use std::collections::HashMap;
-    use serde::{Deserialize};
+    use crate::config::config::Parameters;
 
     #[derive(Debug, Deserialize, Clone, Copy)]
     pub struct AgentStats {
@@ -9,8 +12,8 @@ pub mod model {
         max_vision: u8,
         min_velocity: u8,
         max_velocity: u8,
-        min_age: u8,
-        max_age: u8,
+        pub min_age: u8,
+        pub max_age: u8,
         porv_tourist: f32,
         min_wall_distance: u8,
         max_wall_distance: u8,
@@ -48,7 +51,7 @@ pub mod model {
     }
 
     impl Topology {
-        pub fn layers (&self) -> HashMap<&str, &str> {
+        pub fn layers(&self) -> HashMap<&str, &str> {
             HashMap::from([
                 ("pb", self.layout_pb.as_str()),
                 ("p05", self.layout_p05.as_str()),
@@ -58,7 +61,7 @@ pub mod model {
                 ("p3", self.layout_p3.as_str()),
                 ("p35", self.layout_p35.as_str()),
                 ("p4", self.layout_p4.as_str()),
-                ("p5", self.layout_p5.as_str())
+                ("p5", self.layout_p5.as_str()),
             ])
         }
     }
@@ -85,26 +88,25 @@ pub mod model {
     }
 
     /// HashMap of initial points (Gates). Key => usize position on matrix PB
-    pub fn load_gates (path: String) -> HashMap<String, Vec<usize>>{
-
+    pub fn load_gates(path: String) -> HashMap<String, Vec<usize>> {
         let mut gates: HashMap<String, Vec<usize>> = HashMap::new();
 
         let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found");
 
         for result in reader.deserialize() {
             let record: Gate = result.expect("[ERROR] Incorrect gate format");
-            
+
             match gates.get_mut(&record.gate) {
                 Some(gate) => {
                     gate.push((627 * record.x + record.y) as usize);
-                },
+                }
                 None => {
                     gates.insert(record.gate, vec![(627 * record.x + record.y) as usize]);
                 }
             }
         }
 
-        return gates
+        return gates;
     }
 
     #[derive(Debug, Deserialize)]
@@ -116,8 +118,7 @@ pub mod model {
     }
 
     /// HashMap of Hashmap. First by layer then by  mouth. Key => usize position in matrix
-    pub fn load_mouths (path: String) -> HashMap<String, HashMap<String, Vec<usize>>> {
-        
+    pub fn load_mouths(path: String) -> HashMap<String, HashMap<String, Vec<usize>>> {
         let mut mouths: HashMap<String, HashMap<String, Vec<usize>>> = HashMap::new();
 
         let mut reader = csv::Reader::from_path(path).expect("[ERROR] Mouths file not found");
@@ -125,25 +126,58 @@ pub mod model {
         for result in reader.deserialize() {
             let record: Mouth = result.expect("[ERROR] Incorrect mouth format");
 
-            match mouths.get_mut(&record.layer) {   // Layer key on HashMap exists
-                Some(layer) => {    // Mouth is present in HashMap. Only position pushed
-                    match layer.get_mut(&record.mouth) {
-                        Some(mouth) => {
-                            mouth.push((627 * record.x + record.y) as usize);
-                        },
-                        None => {   // Mouth not in HashMap. Gate vector position is created
-                            layer.insert(record.mouth, vec![(627 * record.x + record.y) as usize]);
+            match mouths.get_mut(&record.layer) {
+                // Layer key on HashMap exists
+                Some(layer) => {
+                    // Mouth is present in HashMap. Only position pushed
+
+                    let mouths: Vec<String> =
+                        record.mouth.split("-").map(|s| s.to_string()).collect();
+
+                    for m in mouths {
+                        // Some mouths feed people to the same grandstand
+
+                        match layer.get_mut(&m) {
+                            Some(mouth) => {
+                                mouth.push((627 * record.x + record.y) as usize);
+                            }
+                            None => {
+                                // Mouth not in HashMap. Gate vector position is created
+                                layer.insert(m, vec![(627 * record.x + record.y) as usize]);
+                            }
                         }
                     }
-                },
-                None => {   // Layer key on HashMap does not exist. All has to be created
-                    mouths.insert(record.layer, HashMap::from([(record.mouth, vec![(627 * record.x + record.y) as usize])]));
+                }
+                None => {
+                    // Layer key on HashMap does not exist. All has to be created
+                    mouths.insert(
+                        record.layer,
+                        HashMap::from([(record.mouth, vec![(627 * record.x + record.y) as usize])]),
+                    );
                 }
             }
         }
 
-        return mouths
-        
+        return mouths;
     }
 
+    fn generate_path() -> Vec<usize> {vec![0]}
+
+    #[derive(Debug)]
+    pub struct Agent {
+        id: u32,
+        path: Vec<usize>,
+        museum: f32,
+        follow: f32,
+        age: u8,   
+    }
+
+    impl Agent {
+        pub fn new(&self, id:u32, config: Parameters, age_calculator: Uniform<u8>) {}
+    }
+}
+
+mod world {
+
+    pub fn stairs_up() {}
 }
