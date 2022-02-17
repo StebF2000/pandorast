@@ -1,10 +1,9 @@
 pub mod model {
 
-    use rand::{Rng, distributions::Uniform};
-    use rayon::vec;
-    use serde::Deserialize;
     use std::collections::HashMap;
-    use crate::config::config::Parameters;
+
+    use rand::distributions::Uniform;
+    use serde::Deserialize;
 
     #[derive(Debug, Deserialize, Clone, Copy)]
     pub struct AgentStats {
@@ -53,15 +52,15 @@ pub mod model {
     impl Topology {
         pub fn layers(&self) -> HashMap<&str, &str> {
             HashMap::from([
-                ("pb", self.layout_pb.as_str()),
-                ("p05", self.layout_p05.as_str()),
-                ("p1", self.layout_p1.as_str()),
-                ("p15", self.layout_p15.as_str()),
-                ("p2", self.layout_p2.as_str()),
-                ("p3", self.layout_p3.as_str()),
-                ("p35", self.layout_p35.as_str()),
-                ("p4", self.layout_p4.as_str()),
-                ("p5", self.layout_p5.as_str()),
+                ("PB", self.layout_pb.as_str()),
+                ("P05", self.layout_p05.as_str()),
+                ("P1", self.layout_p1.as_str()),
+                ("P15", self.layout_p15.as_str()),
+                ("P2", self.layout_p2.as_str()),
+                ("P3", self.layout_p3.as_str()),
+                ("P35", self.layout_p35.as_str()),
+                ("P4", self.layout_p4.as_str()),
+                ("P5", self.layout_p5.as_str()),
             ])
         }
     }
@@ -79,6 +78,17 @@ pub mod model {
         seconds_per_step: f32,
         distribute_agents_along_minutes: bool,
     }
+}
+
+pub mod world {
+
+    use serde::Deserialize;
+    use std::collections::HashMap;
+
+    use crate::{
+        config::config::Parameters,
+        engine::{self, matrix::Matrix},
+    };
 
     #[derive(Debug, Deserialize)]
     struct Gate {
@@ -161,23 +171,47 @@ pub mod model {
         return mouths;
     }
 
-    fn generate_path() -> Vec<usize> {vec![0]}
+    #[derive(Debug)]
+    struct Floor {
+        name: String,
+        blueprint: Matrix,
+        agents: Matrix,
+    }
+
+    fn load_floor(floor: String, path: String, size: (u64, u64)) -> Floor {
+        Floor {
+            name: floor,
+            blueprint: engine::matrix::Matrix::load_layer(path.to_string()),
+            agents: engine::matrix::Matrix::new(size),
+        }
+    }
 
     #[derive(Debug)]
-    pub struct Agent {
-        id: u32,
-        path: Vec<usize>,
-        museum: f32,
-        follow: f32,
-        age: u8,   
+    pub struct World {
+        building: Vec<Floor>,
+        step: u64,
+        total_agents: u64,
     }
 
-    impl Agent {
-        pub fn new(&self, id:u32, config: Parameters, age_calculator: Uniform<u8>) {}
+    pub fn create_world(configuration: Parameters) -> World {
+        let floors = configuration.topology.layers();
+        let mut building: Vec<Floor> = Vec::new();
+
+        for (floor, path) in floors {
+            let mut layer = load_floor(
+                floor.to_string(),
+                path.to_string(),
+                configuration.get_world_size(),
+            );
+
+            building.push(layer);
+        }
+
+        World {
+            building,
+            step: 0,
+            total_agents: configuration.total_agents(),
+        }
     }
-}
-
-mod world {
-
-    pub fn stairs_up() {}
+    
 }

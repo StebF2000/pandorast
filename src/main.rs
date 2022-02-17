@@ -1,6 +1,6 @@
 mod config;
+mod engine;
 mod model;
-mod world;
 
 // Microsoft memory allocator for performance
 use mimalloc::MiMalloc;
@@ -9,9 +9,14 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
-    println!("Hello, world!");
+    println!("Welcome to Pandorast!");
 
     let configuration = config::config::Parameters::load_configuration(String::from("config.toml"));
 
-    println!("{:?}", configuration);
+    let age = rand::distributions::Uniform::new(
+        configuration.get_agent_info().min_age,
+        configuration.get_agent_info().max_age,
+    );
+
+    let world = model::world::create_world(configuration);
 }

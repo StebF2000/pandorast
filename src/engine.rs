@@ -1,5 +1,4 @@
 pub mod matrix {
-    use std::ops::{Index, IndexMut};
 
     #[derive(Debug)]
     pub struct Matrix {
@@ -12,7 +11,7 @@ pub mod matrix {
     impl Matrix {
         pub fn new(size: (u64, u64)) -> Matrix {
             Matrix {
-                data: vec![0, (size.0 * size.1) as u8].into_boxed_slice(),
+                data: vec![0 as u8; (size.0 * size.1) as usize].into_boxed_slice(),
                 rows: size.0,
                 columns: size.1,
                 layer: String::from("Agents"),
