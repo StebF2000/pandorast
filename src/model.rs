@@ -188,14 +188,14 @@ pub mod world {
 
     #[derive(Debug)]
     pub struct World {
-        building: Vec<Floor>,
+        building: HashMap<String, Floor>,
         step: u64,
         total_agents: u64,
     }
 
     pub fn create_world(configuration: Parameters) -> World {
         let floors = configuration.topology.layers();
-        let mut building: Vec<Floor> = Vec::new();
+        let mut building: HashMap<String, Floor> = HashMap::new();
 
         for (floor, path) in floors {
             let mut layer = load_floor(
@@ -204,7 +204,7 @@ pub mod world {
                 configuration.get_world_size(),
             );
 
-            building.push(layer);
+            building.insert(floor.to_string(), layer);
         }
 
         World {
