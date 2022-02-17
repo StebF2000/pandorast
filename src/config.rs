@@ -1,6 +1,6 @@
-pub mod config {
+pub mod configuration {
 
-    use crate::model::model;
+    use crate::iotwins::model;
     use serde::Deserialize;
     use std::fs::File;
     use std::io::Write;
@@ -61,12 +61,10 @@ pub mod config {
             };
 
             // Deserialize config file into config struct
-            let value = match toml::from_str(&data) {
+            return match toml::from_str(&data) {
                 Ok(file) => file,
                 Err(error) => panic!("Problem opening the file: {:?}", error),
-            };
-
-            return value;
+            }
         }
 
         // Grid size for computation

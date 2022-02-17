@@ -11,7 +11,7 @@ pub mod matrix {
     impl Matrix {
         pub fn new(size: (u64, u64)) -> Matrix {
             Matrix {
-                data: vec![0 as u8; (size.0 * size.1) as usize].into_boxed_slice(),
+                data: vec![0_u8; (size.0 * size.1) as usize].into_boxed_slice(),
                 rows: size.0,
                 columns: size.1,
                 layer: String::from("Agents"),
@@ -19,14 +19,14 @@ pub mod matrix {
         }
 
         pub fn load_layer(path: String) -> Matrix {
-            let topology: Vec<&str> = path.split("_").collect();
+            let topology: Vec<&str> = path.split('_').collect();
 
             println!("[INFO] Loading layer {layer}", layer = &topology[1]);
 
             let image = raster::open(path.as_str()).unwrap();
 
             Matrix {
-                data: Vec::from(image.bytes).into_boxed_slice(),
+                data: image.bytes.into_boxed_slice(),
                 rows: image.height as u64,
                 columns: image.width as u64,
                 layer: String::from(topology[1]),
