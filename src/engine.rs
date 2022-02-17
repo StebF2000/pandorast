@@ -9,6 +9,7 @@ pub mod matrix {
     }
 
     impl Matrix {
+        // Generates an empty matrix. Agent-intended
         pub fn new(size: (u64, u64)) -> Matrix {
             Matrix {
                 data: vec![0_u8; (size.0 * size.1) as usize].into_boxed_slice(),
@@ -18,6 +19,7 @@ pub mod matrix {
             }
         }
 
+        // Load blueprint from resources
         pub fn load_layer(path: String) -> Matrix {
             let topology: Vec<&str> = path.split('_').collect();
 

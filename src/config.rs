@@ -47,12 +47,8 @@ pub mod configuration {
     }
 
     impl Parameters {
-        /// Returns a Parameters object
-        ///
-        /// # Arguments
-        /// * `path` - A string pointing to the `.toml` configuration file
-        ///
 
+        // Returns configuration
         pub fn load_configuration(path: String) -> Parameters {
             // Open config file
             let data = match std::fs::read_to_string(path) {
@@ -107,6 +103,7 @@ pub mod configuration {
             self.match_timings
         }
 
+        // Total agents to be simulated
         pub fn total_agents(&self) -> u64 {
             self.input_data.num_agents
         }

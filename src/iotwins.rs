@@ -96,6 +96,7 @@ pub mod model {
         std: u8,
     }
 
+    //HashMap of arrivals by time. Key => vec of arrivals
     pub fn load_arrivals(path: String) -> HashMap<i32, Vec<Arrival>> {
         let mut arrivals: HashMap<i32, Vec<Arrival>> = HashMap::new();
 
@@ -106,12 +107,14 @@ pub mod model {
 
             match arrivals.get_mut(&(data.minutes_to_game as i32)) {
                 Some(time) => time.push(Arrival {
+                    // Pushes new arrival
                     init: data.gate,
                     destination: data.mouth,
                     num_agents: data.agents,
                     std: data.agents_std,
                 }),
                 None => {
+                    // Generates key and vector with first arrival
                     arrivals.insert(
                         data.minutes_to_game as i32,
                         vec![Arrival {
@@ -135,35 +138,6 @@ pub mod world {
     use std::collections::HashMap;
 
     use crate::{config::configuration::Parameters, engine::matrix::Matrix};
-
-    #[derive(Debug, Deserialize)]
-    struct Gate {
-        gate: String,
-        x: u32,
-        y: u32,
-    }
-
-    /// HashMap of initial points (Gates). Key => usize position on matrix PB
-    pub fn load_gates(path: String) -> HashMap<String, Vec<usize>> {
-        let mut gates: HashMap<String, Vec<usize>> = HashMap::new();
-
-        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found");
-
-        for result in reader.deserialize() {
-            let record: Gate = result.expect("[ERROR] Incorrect gate format");
-
-            match gates.get_mut(&record.gate) {
-                Some(gate) => {
-                    gate.push((627 * record.x + record.y) as usize);
-                }
-                None => {
-                    gates.insert(record.gate, vec![(627 * record.x + record.y) as usize]);
-                }
-            }
-        }
-
-        gates
-    }
 
     #[derive(Debug, Deserialize)]
     struct Mouth {
@@ -217,6 +191,35 @@ pub mod world {
         mouths
     }
 
+    #[derive(Debug, Deserialize)]
+    struct Gate {
+        gate: String,
+        x: u32,
+        y: u32,
+    }
+
+    /// HashMap of initial points (Gates). Key => usize position on matrix PB
+    pub fn load_gates(path: String) -> HashMap<String, Vec<usize>> {
+        let mut gates: HashMap<String, Vec<usize>> = HashMap::new();
+
+        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found");
+
+        for result in reader.deserialize() {
+            let record: Gate = result.expect("[ERROR] Incorrect gate format");
+
+            match gates.get_mut(&record.gate) {
+                Some(gate) => {
+                    gate.push((627 * record.x + record.y) as usize);
+                }
+                None => {
+                    gates.insert(record.gate, vec![(627 * record.x + record.y) as usize]);
+                }
+            }
+        }
+
+        gates
+    }
+
     #[derive(Debug)]
     struct Floor {
         name: String,
@@ -239,6 +242,7 @@ pub mod world {
         total_agents: u64,
     }
 
+    // Generate a unique HashMap with the whole simulation with index for checkpointing and agents
     pub fn create_world(configuration: Parameters) -> World {
         let floors = configuration.topology.layers();
         let mut building: HashMap<String, Floor> = HashMap::new();
