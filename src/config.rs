@@ -64,7 +64,7 @@ pub mod configuration {
             return match toml::from_str(&data) {
                 Ok(file) => file,
                 Err(error) => panic!("Problem opening the file: {:?}", error),
-            }
+            };
         }
 
         // Grid size for computation

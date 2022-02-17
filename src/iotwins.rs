@@ -78,6 +78,55 @@ pub mod model {
         seconds_per_step: f32,
         distribute_agents_along_minutes: bool,
     }
+
+    #[derive(Debug, Deserialize)]
+    struct ArrivalData {
+        gate: String,
+        mouth: String,
+        minutes_to_game: f32,
+        agents: u8,
+        agents_std: u8,
+    }
+
+    #[derive(Debug)]
+    pub struct Arrival {
+        init: String,
+        destination: String,
+        num_agents: u8,
+        std: u8,
+    }
+
+    pub fn load_arrivals(path: String) -> HashMap<i32, Vec<Arrival>> {
+        let mut arrivals: HashMap<i32, Vec<Arrival>> = HashMap::new();
+
+        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Arrivals file not found");
+
+        for arrival in reader.deserialize() {
+            let data: ArrivalData = arrival.expect("[ERROR] Incorrect arrival format");
+
+            match arrivals.get_mut(&(data.minutes_to_game as i32)) {
+                Some(time) => time.push(Arrival {
+                    init: data.gate,
+                    destination: data.mouth,
+                    num_agents: data.agents,
+                    std: data.agents_std,
+                }),
+                None => {
+                    arrivals.insert(
+                        data.minutes_to_game as i32,
+                        vec![Arrival {
+                            init: data.gate,
+                            destination: data.mouth,
+                            num_agents: data.agents,
+                            std: data.agents_std,
+                        }],
+                    );
+                }
+            }
+        }
+
+        arrivals
+    }
 }
 
 pub mod world {
@@ -85,10 +134,7 @@ pub mod world {
     use serde::Deserialize;
     use std::collections::HashMap;
 
-    use crate::{
-        config::configuration::Parameters,
-        engine::matrix::Matrix,
-    };
+    use crate::{config::configuration::Parameters, engine::matrix::Matrix};
 
     #[derive(Debug, Deserialize)]
     struct Gate {
@@ -142,7 +188,7 @@ pub mod world {
                     // Mouth is present in HashMap. Only position pushed
 
                     let mouths: Vec<String> =
-                        record.mouth.split("-").map(|s| s.to_string()).collect();
+                        record.mouth.split('-').map(|s| s.to_string()).collect();
 
                     for m in mouths {
                         // Some mouths feed people to the same grandstand
@@ -213,5 +259,4 @@ pub mod world {
             total_agents: configuration.total_agents(),
         }
     }
-    
 }
