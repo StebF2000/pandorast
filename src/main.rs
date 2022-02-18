@@ -1,10 +1,21 @@
 mod config;
-mod model;
+mod engine;
+mod iotwins;
+
+// Microsoft memory allocator for performance
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
-    println!("Hello, world!");
+    println!("Welcome to Pandorast!");
 
-    let configuration = config::config::Parameters::load_configuration(String::from("config.toml"));
+    let configuration =
+        config::configuration::Parameters::load_configuration(String::from("config.toml"));
 
-    println!("{:?}", configuration);
+    let age = rand::distributions::Uniform::new(
+        configuration.get_agent_info().min_age,
+        configuration.get_agent_info().max_age,
+    );
 }
