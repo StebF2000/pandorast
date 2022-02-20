@@ -1,6 +1,6 @@
 pub mod configuration {
 
-    use crate::iotwins::model;
+    use crate::iotwins_model::model;
     use serde::Deserialize;
     use std::fs::File;
     use std::io::Write;
@@ -47,7 +47,6 @@ pub mod configuration {
     }
 
     impl Parameters {
-
         // Returns configuration
         pub fn load_configuration(path: String) -> Parameters {
             // Open config file
@@ -64,8 +63,8 @@ pub mod configuration {
         }
 
         // Grid size for computation
-        pub fn get_world_size(&self) -> (u64, u64) {
-            (self.size.height, self.size.width)
+        pub fn get_world_size(&self) -> (usize, usize) {
+            (self.size.height as usize, self.size.width as usize)
         }
 
         // Consolidate results
