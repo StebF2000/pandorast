@@ -1,7 +1,9 @@
 pub mod matrix {
     use image::io::Reader as ImageReader;
     use serde::{Deserialize, Serialize};
-    use std::collections::HashMap;
+    use std::{collections::HashMap, fs::File, io::Write};
+
+    use crate::iotwins::model::Agent;
 
     #[derive(Debug, Clone)]
     pub struct Matrix<T> {
@@ -55,6 +57,20 @@ pub mod matrix {
                 n_rows: size.0,
                 n_cols: size.1,
             }
+        }
+
+        // Update agent position
+        pub fn matrix_movement(&mut self, agent: &Agent, position: usize) {
+            self.data[agent.position] = 0;
+            self.data[position] = agent.id;
+        }
+
+        pub fn write_data(&self) {
+            let data: Vec<String> = self.data.iter().map(|n| n.to_string()).collect();
+
+            let mut file = File::create("test").expect("[ERROR]");
+
+            writeln!(file, "{}", data.join(", ")).expect("[Err]");
         }
     }
 

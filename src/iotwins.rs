@@ -1,7 +1,10 @@
 pub mod model {
 
-    use std::collections::HashMap;
+    use rand::prelude::ThreadRng;
     use serde::Deserialize;
+    use std::collections::HashMap;
+
+    use crate::iotwins::world::World;
 
     #[derive(Debug, Deserialize, Clone, Copy)]
     pub struct AgentStats {
@@ -124,11 +127,63 @@ pub mod model {
 
         arrivals
     }
+
+    #[derive(Debug)]
+    pub struct Agent {
+        pub id: u64,
+        age: u32,
+        path: Vec<usize>,
+        pub init: String,
+        pub destination: String,
+        pub position: usize,
+        pub layer: String,
+        steps: usize,
+    }
+
+    impl Agent {
+        // pub fn load_agents(
+        //     arrival_data: &[Arrival],
+        //     world: &mut World,
+        //     index: &mut u32,
+        //     rng: &mut ThreadRng,
+        // ) {
+        //     // Update index for agent id
+        //     let mut idx = *index;
+
+        //     for arrival in arrival_data {
+        //         for _ in 0..arrival.num_agents {
+        //             let mut agent = Agent {
+        //                 id: idx,
+        //                 age: 25, // Not implemented as not used yet. Default age set
+        //                 path: vec![0, 1, 2],
+        //                 init: arrival.init.to_string(), // Gate reference to place the agent
+        //                 destination: arrival.destination,
+        //                 position: 0, // None alternative
+        //                 layer: String::from("PB"),
+        //                 steps: 0,
+        //             };
+
+        //             idx += 1;
+
+        //             // Placing agent on gate
+        //             world.insert_agent(&mut agent, rng);
+        //         }
+        //     }
+        //     // Updated index for next agents
+        //     *index = idx;
+        // }
+
+        pub fn action_movement(&mut self) -> usize {
+            self.steps += 1;
+
+            self.path[self.steps]
+        }
+    }
 }
 
 pub mod world {
 
-    use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+    use indicatif::{ProgressBar, ProgressStyle, ProgressIterator};
     use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
     use serde::{Deserialize, Serialize};
     use std::{
@@ -139,7 +194,7 @@ pub mod world {
     use crate::{
         config::configuration::Parameters,
         engine::matrix::Matrix,
-        engine::matrix::Position as Position,
+        engine::matrix::Position,
         iotwins::{
             self,
             model::{self, Arrival},
@@ -674,7 +729,7 @@ pub mod world {
         let floors = configuration.topology.layers();
         let mut building: HashMap<String, Floor> = HashMap::new();
 
-        print!("[INFO] Creating world\t");
+        println!("[INFO] Creating world");
 
         for (floor, path) in floors {
             let layer = Floor::load_floor(
@@ -685,8 +740,6 @@ pub mod world {
 
             building.insert(floor.to_string(), layer);
         }
-
-        println!("[DONE]");
 
         World {
             building,

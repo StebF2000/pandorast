@@ -13,6 +13,8 @@ static GLOBAL: MiMalloc = MiMalloc;
 fn main() {
     println!("Welcome to Pandorast!");
 
+    let mut rng = rand::thread_rng();
+
     let configuration =
         config::configuration::Parameters::load_configuration(String::from("config.toml"));
 
