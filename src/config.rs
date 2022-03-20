@@ -20,8 +20,8 @@ pub mod configuration {
 
     #[derive(Debug, Deserialize)]
     struct Size {
-        height: u64,
-        width: u64,
+        height: u32,
+        width: u32,
     }
 
     #[derive(Debug, Deserialize)]
@@ -47,7 +47,6 @@ pub mod configuration {
     }
 
     impl Parameters {
-
         // Returns configuration
         pub fn load_configuration(path: String) -> Parameters {
             // Open config file
@@ -64,7 +63,7 @@ pub mod configuration {
         }
 
         // Grid size for computation
-        pub fn get_world_size(&self) -> (u64, u64) {
+        pub fn get_world_size(&self) -> (u32, u32) {
             (self.size.height, self.size.width)
         }
 
