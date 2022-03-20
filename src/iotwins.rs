@@ -294,7 +294,7 @@ pub mod world {
         gates
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug, Serialize, Deserialize, Clone)]
     pub struct MapJump {
         location: Vec<usize>,
         position: Position,
@@ -302,7 +302,7 @@ pub mod world {
     }
 
     impl MapJump {
-        pub fn find_location(building: World) -> HashMap<String, Vec<MapJump>> {
+        pub fn find_location(building: &HashMap<String, Floor>) -> HashMap<String, Vec<MapJump>> {
             let points: HashSet<u8> = HashSet::from([10, 11, 3]);
 
             // This will define the position of each facility
@@ -312,7 +312,7 @@ pub mod world {
             print!("[INFO] Detecting structures\t");
 
             // Generate nodes
-            for (layer, floor) in building.building {
+            for (layer, floor) in building {
                 let mut already_visited: HashSet<usize> =
                     HashSet::with_capacity(floor.blueprint.data.len());
 
@@ -389,7 +389,7 @@ pub mod world {
                 );
 
                 central.insert(
-                    layer,
+                    layer.to_string(),
                     HashMap::from([
                         (10, down_stairs_pos),
                         (11, up_stairs_pos),
@@ -604,7 +604,7 @@ pub mod world {
     }
 
     #[derive(Debug, Clone)]
-    struct Floor {
+    pub struct Floor {
         name: String,
         blueprint: Matrix<u8>,
         agents: Matrix<u64>,
@@ -651,11 +651,12 @@ pub mod world {
 
     #[derive(Debug)]
     pub struct World {
-        building: HashMap<String, Floor>,
+        pub building: HashMap<String, Floor>,
         step: u64,
         pub gates: HashMap<String, Vec<usize>>,
         pub mouths: HashMap<String, HashMap<i16, Vec<usize>>>,
         pub arrivals: HashMap<i32, Vec<Arrival>>,
+        pub stairs: HashMap<String, Vec<MapJump>>,
     }
 
     impl World {
@@ -742,11 +743,12 @@ pub mod world {
         }
 
         World {
-            building,
+            stairs: world::MapJump::find_location(&building),
             step: 0,
             gates: world::load_gates(configuration.venue_tags.gates_info),
             mouths: world::load_mouths(configuration.venue_tags.mouths_info),
             arrivals: model::load_arrivals(configuration.venue_tags.arrivals_info_csv),
+            building,
         }
     }
 }

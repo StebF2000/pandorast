@@ -5,3 +5,4 @@ config.*
 resources/
 .vscode/
 Cargo.lock
+*.json

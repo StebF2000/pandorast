@@ -20,8 +20,5 @@ fn main() {
 
     let world = iotwins::world::create_world(configuration);
 
-    let jumps = iotwins::world::MapJump::find_location(world);
-
-    serde_json::to_writer(&File::create("stairs.json").expect("ERROR"), &jumps).expect("[ERROR]");
 
 }
