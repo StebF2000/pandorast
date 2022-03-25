@@ -1,10 +1,7 @@
 pub mod model {
 
-    use rand::prelude::ThreadRng;
     use serde::Deserialize;
     use std::collections::HashMap;
-
-    use crate::iotwins::world::World;
 
     #[derive(Debug, Deserialize, Clone, Copy)]
     pub struct AgentStats {
@@ -183,18 +180,19 @@ pub mod model {
 
 pub mod world {
 
-    use indicatif::{ProgressBar, ProgressStyle, ProgressIterator};
-    use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+    use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+    use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
     use serde::{Deserialize, Serialize};
     use std::{
         collections::{BinaryHeap, HashMap, HashSet},
+        fs::File,
         iter::zip,
     };
 
     use crate::{
         config::configuration::Parameters,
         engine::matrix::Matrix,
-        engine::matrix::Position,
+        engine::{self, matrix::Position, routes::ConcurrentHashMap},
         iotwins::{
             self,
             model::{self, Arrival},
@@ -302,7 +300,7 @@ pub mod world {
     }
 
     impl MapJump {
-        pub fn find_location(building: &HashMap<String, Floor>) -> HashMap<String, Vec<MapJump>> {
+        pub fn find_locations(building: &HashMap<String, Floor>) -> HashMap<String, Vec<MapJump>> {
             let points: HashSet<u8> = HashSet::from([10, 11, 3]);
 
             // This will define the position of each facility
@@ -412,8 +410,260 @@ pub mod world {
                         ).progress_chars("#>#-"));
             // End of progress bar stle
 
+            central
+                .iter()
+                .progress_with(progress_bar)
+                .for_each(|(layer, position_hash)| {
+                    // Get all other layers
+                    let mut destination_layers: Vec<String> = layers.clone();
+                    destination_layers.retain(|l| l != layer);
+
+                    // Store jumps for each layer
+                    let mut layer_vec: Vec<MapJump> = Vec::new();
+
+                    let layer_jumps = jumps.get(layer).expect("[ERROR]");
+
+                    position_hash
+                        .into_iter()
+                        .for_each(|(jump_type, positions)| match jump_type {
+                            10 => {
+                                let locations = layer_jumps.get(&11).expect("[ERROR]");
+
+                                for (position, location) in zip(positions, locations) {
+                                    let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+
+                                    destination_layers.iter().for_each(|destination| {
+                                        let possible_links = central
+                                            .get(destination)
+                                            .expect("[ERROR]")
+                                            .get(&11)
+                                            .expect("[ERROR]");
+
+                                        let possible_groups = jumps
+                                            .get(destination)
+                                            .expect("[ERROR]")
+                                            .get(&11)
+                                            .expect("[ERROR]");
+
+                                        if !possible_groups.is_empty() && !possible_links.is_empty()
+                                        {
+                                            let closest_idx = Position::closest(
+                                                position,
+                                                possible_links.to_vec(),
+                                            );
+
+                                            let group = &possible_groups[closest_idx];
+
+                                            conexions
+                                                .insert(destination.to_string(), group.to_vec());
+                                        }
+                                    });
+
+                                    layer_vec.push(MapJump {
+                                        location: location.to_vec(),
+                                        position: *position,
+                                        conexions,
+                                    });
+                                }
+                            }
+                            11 => {
+                                let locations = layer_jumps.get(&10).expect("[ERROR]");
+
+                                for (position, location) in zip(positions, locations) {
+                                    let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+
+                                    destination_layers.iter().for_each(|destination| {
+                                        let possible_links = central
+                                            .get(destination)
+                                            .expect("[ERROR]")
+                                            .get(&10)
+                                            .expect("[ERROR]");
+
+                                        let possible_groups = jumps
+                                            .get(destination)
+                                            .expect("[ERROR]")
+                                            .get(&10)
+                                            .expect("[ERROR]");
+
+                                        if !possible_groups.is_empty() && !possible_links.is_empty()
+                                        {
+                                            let closest_idx = Position::closest(
+                                                position,
+                                                possible_links.to_vec(),
+                                            );
+
+                                            let group = &possible_groups[closest_idx];
+
+                                            conexions
+                                                .insert(destination.to_string(), group.to_vec());
+                                        }
+                                    });
+
+                                    layer_vec.push(MapJump {
+                                        location: location.to_vec(),
+                                        position: *position,
+                                        conexions,
+                                    });
+                                }
+                            }
+                            _ => {
+                                let locations = layer_jumps.get(&3).expect("[ERROR]");
+
+                                for (position, location) in zip(positions, locations) {
+                                    let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+
+                                    destination_layers.iter().for_each(|destination| {
+                                        let possible_links = central
+                                            .get(destination)
+                                            .expect("[ERROR]")
+                                            .get(&3)
+                                            .expect("[ERROR]");
+
+                                        let possible_groups = jumps
+                                            .get(destination)
+                                            .expect("[ERROR]")
+                                            .get(&3)
+                                            .expect("[ERROR]");
+
+                                        if !possible_groups.is_empty() && !possible_links.is_empty()
+                                        {
+                                            let closest_idx = Position::closest(
+                                                position,
+                                                possible_links.to_vec(),
+                                            );
+
+                                            let group = &possible_groups[closest_idx];
+
+                                            conexions
+                                                .insert(destination.to_string(), group.to_vec());
+                                        }
+                                    });
+
+                                    layer_vec.push(MapJump {
+                                        location: location.to_vec(),
+                                        position: *position,
+                                        conexions,
+                                    });
+                                }
+                            }
+                        });
+
+                    // for (jump_type, positions) in position_hash {
+                    //     match jump_type {
+                    //         10 => {
+                    //             let locations = layer_jumps.get(&11).expect("[ERROR]");
+
+                    //             for (position, location) in zip(positions, locations) {
+                    //                 let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+
+                    //                 for destination in &destination_layers {
+                    //                     let possible_links = central
+                    //                         .get(destination)
+                    //                         .expect("[ERROR]")
+                    //                         .get(&11)
+                    //                         .expect("[ERROR]");
+
+                    //                     let possible_groups = jumps
+                    //                         .get(destination)
+                    //                         .expect("[ERROR]")
+                    //                         .get(&11)
+                    //                         .expect("[ERROR]");
+
+                    //                     if !possible_groups.is_empty() && !possible_links.is_empty() {
+                    //                         let closest_idx =
+                    //                             Position::closest(&position, possible_links.to_vec());
+
+                    //                         let group = &possible_groups[closest_idx];
+
+                    //                         conexions.insert(destination.to_string(), group.to_vec());
+                    //                     }
+                    //                 }
+
+                    //                 layer_vec.push(MapJump {
+                    //                     location: location.to_vec(),
+                    //                     position,
+                    //                     conexions,
+                    //                 });
+                    //             }
+                    //         }
+                    //         11 => {
+                    //             let locations = layer_jumps.get(&10).expect("[ERROR]");
+
+                    //             for (position, location) in zip(positions, locations) {
+                    //                 let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+
+                    //                 for destination in &destination_layers {
+                    //                     let possible_links = central
+                    //                         .get(destination)
+                    //                         .expect("[ERROR]")
+                    //                         .get(&10)
+                    //                         .expect("[ERROR]");
+
+                    //                     let possible_groups = jumps
+                    //                         .get(destination)
+                    //                         .expect("[ERROR]")
+                    //                         .get(&10)
+                    //                         .expect("[ERROR]");
+
+                    //                     if !possible_groups.is_empty() && !possible_links.is_empty() {
+                    //                         let closest_idx =
+                    //                             Position::closest(&position, possible_links.to_vec());
+
+                    //                         let group = &possible_groups[closest_idx];
+
+                    //                         conexions.insert(destination.to_string(), group.to_vec());
+                    //                     }
+                    //                 }
+
+                    //                 layer_vec.push(MapJump {
+                    //                     location: location.to_vec(),
+                    //                     position,
+                    //                     conexions,
+                    //                 });
+                    //             }
+                    //         }
+                    //         _ => {
+                    //             let locations = layer_jumps.get(&3).expect("[ERROR]");
+
+                    //             for (position, location) in zip(positions, locations) {
+                    //                 let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+
+                    //                 for destination in &destination_layers {
+                    //                     let possible_links = central
+                    //                         .get(destination)
+                    //                         .expect("[ERROR]")
+                    //                         .get(&3)
+                    //                         .expect("[ERROR]");
+
+                    //                     let possible_groups = jumps
+                    //                         .get(destination)
+                    //                         .expect("[ERROR]")
+                    //                         .get(&3)
+                    //                         .expect("[ERROR]");
+
+                    //                     if !possible_groups.is_empty() && !possible_links.is_empty() {
+                    //                         let closest_idx =
+                    //                             Position::closest(position, possible_links.to_vec());
+
+                    //                         let group = &possible_groups[closest_idx];
+
+                    //                         conexions.insert(destination.to_string(), group.to_vec());
+                    //                     }
+                    //                 }
+
+                    //                 layer_vec.push(MapJump {
+                    //                     location: location.to_vec(),
+                    //                     position,
+                    //                     conexions,
+                    //                 });
+                    //             }
+                    //         }
+                    //     }
+                    // }
+                });
+
             // Get all conexions for each jump
-            for (layer, position_hash) in central.iter().progress_with(progress_bar) {
+            for (layer, position_hash) in central.iter() {
                 // Get all other layers
                 let mut destination_layers: Vec<String> = layers.clone();
                 destination_layers.retain(|l| l != layer);
@@ -536,13 +786,28 @@ pub mod world {
                     }
                 }
 
-                building_mapping.insert(layer.to_string(), layer_vec);
+                // Memory efficient
+                if !layer_vec.is_empty() {
+                    building_mapping.insert(layer.to_string(), layer_vec);
+                }
             }
 
             println!("[DONE]");
 
             building_mapping
         }
+
+        pub fn save_locations(locations: &HashMap<String, Vec<MapJump>>, path: String) {
+            let file = File::create(path).expect("[ERROR] No write permissions");
+
+            serde_json::to_writer(file, locations).expect("[ERROR] No file");
+
+            println!("[INFO] Locations saved");
+        }
+
+        // pub fn load_locations(path: String) -> HashMap<String, Vec<MapJump>> {
+
+        // }
 
         fn contiguous(position: usize) -> Vec<usize> {
             let col_pos = position % 627;
@@ -660,69 +925,76 @@ pub mod world {
     }
 
     impl World {
-        // pub fn default_paths(&self) -> ConcurrentHashMap {
-        //     // TODO: Compare all gates against each other, one search for two routes
-        //     let routes = engine::routes::ConcurrentHashMap::new();
+        pub fn default_paths(&self) -> ConcurrentHashMap {
+            // TODO: Compare all gates against each other, one search for two routes
+            let routes = ConcurrentHashMap::new();
 
-        //     for (level, floor) in &self.building {
-        //         if !self.mouths.contains_key(level) {
-        //             continue;
-        //         } // If level has no mouths continue
+            for (level, floor) in &self.building {
+                if !self.stairs.contains_key(level) {
+                    continue;
+                } // If level has no mouths continue
 
-        //         println!("[INFO] Finding routes for layer {level}");
+                println!("[INFO] Finding routes for layer {level}");
 
-        //         let floor_gt = &floor.ground_truth.data;
+                let floor_gt = &floor.ground_truth.data;
 
-        //         let mut all_mouths: Vec<Vec<usize>> = self
-        //             .mouths
-        //             .get(level)
-        //             .expect("[ERROR] Layer does not exist")
-        //             .clone()
-        //             .into_values()
-        //             .collect();
+                let mut all_mouths: Vec<Vec<usize>> = self
+                    .mouths
+                    .get(level)
+                    .expect("[ERROR] Layer does not exist")
+                    .clone()
+                    .into_values()
+                    .collect();
 
-        //         let mouths = self
-        //             .mouths
-        //             .get(level)
-        //             .expect("[ERROR] Mouth does not exist");
+                let mouths = self
+                    .mouths
+                    .get(level)
+                    .expect("[ERROR] Mouth does not exist");
 
-        //         // Progress bar (CUTE and no performance impact)
-        //         let progress_bar = ProgressBar::new(mouths.values().len().try_into().unwrap());
+                // Progress bar (CUTE and no performance impact)
+                let progress_bar = ProgressBar::new(mouths.values().len().try_into().unwrap());
 
-        //         progress_bar.set_style(
-        //             ProgressStyle::default_spinner()
-        //                 .template(
-        //                     "{elapsed:.white} {bar:25.blue/white} {pos:.blue}/{len:.white} ({eta_precise})",
-        //                 )
-        //                 .progress_chars("$>#"),
-        //         );
-        //         // End of progress bar stle
+                progress_bar.set_style(
+                    ProgressStyle::default_spinner()
+                        .template(
+                            "{elapsed:.white} {bar:25.blue/white} {pos:.blue}/{len:.white} ({eta_precise})",
+                        )
+                        .progress_chars("$>#"),
+                );
+                // End of progress bar stle
 
-        //         for positions in mouths.values().progress_with(progress_bar) {
-        //             all_mouths.retain(|poss| poss != positions); // Remove current mouth to not be computed
+                for positions in mouths.values().progress_with(progress_bar) {
+                    all_mouths.retain(|poss| poss != positions); // Remove current mouth to not be computed
 
-        //             // Every single value that is assigned to a given mouth
-        //             for position in positions {
-        //                 // All other mouths' positions grouped by its corresponding mouth distributed each group to a thread
-        //                 (0..all_mouths.len()).into_par_iter().for_each(|idx| {
-        //                     all_mouths[idx].iter().for_each(|destination| {
-        //                         // This part is parallelized, multiple paths are comuted at the same time,
-        //                         // multiple destination for the same mouth
-        //                         let path = engine::path_finding::a_star(
-        //                             floor_gt,
-        //                             *position,
-        //                             *destination,
-        //                             627,
-        //                         );
-        //                         routes.insert(level.to_string(), *position, *destination, path);
-        //                     });
-        //                 });
-        //             }
-        //         }
-        //     }
+                    // Every single value that is assigned to a given mouth
+                    for position in positions {
+                        // All other mouths' positions grouped by its corresponding mouth distributed each group to a thread
+                        (0..all_mouths.len()).into_par_iter().for_each(|idx| {
+                            all_mouths[idx].iter().for_each(|destination| {
+                                // This part is parallelized, multiple paths are comuted at the same time,
+                                // multiple destination for the same mouth
+                                let path = engine::path_finding::a_star(
+                                    floor_gt,
+                                    *position,
+                                    *destination,
+                                    627,
+                                );
+                                routes.insert(level.to_string(), *position, *destination, path);
+                            });
+                        });
+                    }
+                }
+            }
 
-        //     routes
-        // }
+            routes
+        }
+
+        fn get_layer_stairs(&self, layer: String) -> Vec<MapJump> {
+            self.stairs
+                .get(&layer)
+                .expect("[ERROR] No such layer")
+                .to_vec()
+        }
     }
 
     // Generate a unique HashMap with the whole simulation with index for checkpointing and agents
@@ -743,7 +1015,7 @@ pub mod world {
         }
 
         World {
-            stairs: world::MapJump::find_location(&building),
+            stairs: world::MapJump::find_locations(&building),
             step: 0,
             gates: world::load_gates(configuration.venue_tags.gates_info),
             mouths: world::load_mouths(configuration.venue_tags.mouths_info),
