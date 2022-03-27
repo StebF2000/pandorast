@@ -7,7 +7,7 @@
 		"args": {
 			// Use the VARIANT arg to pick a Debian OS version: buster, bullseye
 			// Use bullseye when on local on arm64/Apple Silicon.
-			"VARIANT": "bullseye"
+			"VARIANT": "buster"
 		}
 	},
 	"runArgs": [
@@ -15,7 +15,7 @@
 		"--security-opt",
 		"seccomp=unconfined",
 		"--name=pandorast",
-		"--memory=32g",
+		"--memory=16g",
 		"--cpus=6.000",
 	],
 	// Set *default* container specific settings.json values on container create.
@@ -46,7 +46,10 @@
 		"tamasfe.even-better-toml",
 		"serayuzgur.crates",
 		"docsmsft.docs-markdown",
-		"GitHub.vscode-pull-request-github"
+		"GitHub.vscode-pull-request-github",
+		"ms-python.python",
+		"ms-python.vscode-pylance",
+		"ms-azuretools.vscode-docker"
 	],
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	"forwardPorts": [8888, 9099],

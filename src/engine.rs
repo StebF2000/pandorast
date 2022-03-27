@@ -1,6 +1,7 @@
 pub mod matrix {
     use image::io::Reader as ImageReader;
     use serde::{Deserialize, Serialize};
+    use std::hash::{Hash, Hasher};
     use std::{collections::HashMap, fs::File, io::Write};
 
     use crate::iotwins::model::Agent;
@@ -74,7 +75,7 @@ pub mod matrix {
         }
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq)]
     pub struct Position {
         pub x: i32,
         pub y: i32,
@@ -86,12 +87,19 @@ pub mod matrix {
         }
     }
 
+    impl Hash for Position {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.x.hash(state);
+            self.y.hash(state);
+        }
+    }
+
     impl Position {
         pub fn closest(&self, others: Vec<Position>) -> usize {
             let mut dist = i32::MAX;
             let mut closest = 0;
 
-            others.iter().enumerate().for_each(|(idx, position)| {
+            others.into_iter().enumerate().for_each(|(idx, position)| {
                 // Fast euclidean distance
                 let d = i32::pow(self.x - position.x, 2) + i32::pow(self.y - position.y, 2);
 
@@ -164,10 +172,10 @@ pub mod path_finding {
                 continue;
             }
 
-            // Coputes new heuristic (inlined for compiler optimization purposes)
-
+            // Computes new heuristic (inlined for compiler optimization purposes)
             movements(position, grid_size, gt)
                 .into_iter()
+                .filter(|pos| pos < &(grid_size * grid_size))
                 .for_each(|pos| {
                     // Cost towards next step (actual cost + step + heuristic)
                     let new_cost = cost + 1_u64 + cost_function[pos];
@@ -193,6 +201,7 @@ pub mod path_finding {
 
     // Basic heuristic function, derivate-like where as you get closer to the target, the cost reduces
     // Diagonal values taking into account, should be adapted for obstacles
+    #[inline(always)]
     fn heuristic(pos: usize, grid_size: usize) -> u64 {
         let row = pos / grid_size;
         let col = pos % grid_size;
@@ -201,18 +210,29 @@ pub mod path_finding {
     }
 
     fn movements(position: usize, grid_size: usize, gt: &[u8]) -> Vec<usize> {
-        let col_pos = position % grid_size;
         let row_pos = position / grid_size;
 
-        // Get new positons
-        let mut positions = vec![
-            (grid_size * row_pos + col_pos) - 1,
-            (grid_size * row_pos + col_pos) + 1,
-            (grid_size + 1) * row_pos + col_pos,
-            (grid_size - 1) * row_pos + col_pos,
-        ];
-        // Remove out of matrix and walls positions
-        positions.retain(|pos| (pos < &(grid_size * grid_size)) && (gt[*pos] == 0));
+        let mut positions = Vec::with_capacity(4);
+
+        match row_pos {
+            0 => {
+                positions = Vec::from([]);
+            }
+            627 => {
+                positions = Vec::from([]);
+            }
+            _ => {
+                positions = Vec::from([
+                    position - grid_size,
+                    position - 1,
+                    position + 1,
+                    position + grid_size,
+                ]);
+            }
+        }
+
+        // Remove out of matrix and walls position (inplace)
+        positions.retain(|pos| pos < &(grid_size * grid_size) && gt[*pos] != 1);
 
         positions
     }
@@ -244,13 +264,9 @@ pub mod path_finding {
 
 pub mod routes {
 
-    use std::{
-        collections::HashMap,
-        fs::{self, File},
-        io::{BufRead, BufReader, BufWriter},
-    };
+    use std::{collections::HashMap, fs::File, io::BufWriter};
 
-    use bincode::{deserialize_from, serialize_into};
+    use bincode::serialize_into;
     use dashmap::DashMap;
     use serde::{Deserialize, Serialize};
 
@@ -266,6 +282,20 @@ pub mod routes {
             ConcurrentHashMap {
                 routes: DashMap::new(),
             }
+        }
+
+        // Generate a standard HashMap from Concurrent (only for saving purposes)
+        pub fn convert_concurrent(&self) -> DualHashMap {
+            let mut map: DualHashMap = DualHashMap::new();
+
+            for (floor, outer) in self.routes.clone() {
+                for (p1, inner) in outer {
+                    for (p2, path) in inner {
+                        map.insert(&floor, p1, p2, path);
+                    }
+                }
+            }
+            map
         }
 
         pub fn insert(&self, layer: String, origin: usize, destination: usize, path: Vec<usize>) {
@@ -327,7 +357,7 @@ pub mod routes {
     }
 
     // Convert a standard HashMap to concurrent one
-    pub fn convert_standard(map: DualHashMap<usize, usize, Vec<usize>>) -> ConcurrentHashMap {
+    pub fn convert_standard(map: DualHashMap) -> ConcurrentHashMap {
         let mut concurrent = ConcurrentHashMap::new();
 
         for (layer, floor) in map.data {
@@ -341,13 +371,13 @@ pub mod routes {
         concurrent
     }
 
-    #[derive(Debug)]
-    pub struct DualHashMap<T, U, P> {
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct DualHashMap {
         // Layer -> Origin -> Destination -> path
-        data: HashMap<String, HashMap<T, HashMap<U, P>>>,
+        data: HashMap<String, HashMap<usize, HashMap<usize, Vec<usize>>>>,
     }
 
-    impl DualHashMap<usize, usize, Vec<usize>> {
+    impl DualHashMap {
         pub fn get(&self, layer: String, p1: usize, p2: usize) -> Option<Vec<usize>> {
             match self.data.get(&layer) {
                 Some(layer) => {
@@ -369,7 +399,7 @@ pub mod routes {
             }
         }
 
-        pub fn insert(&mut self, floor: &String, p1: usize, p2: usize, path: Vec<usize>) {
+        pub fn insert(&mut self, floor: &str, p1: usize, p2: usize, path: Vec<usize>) {
             match self.data.get_mut(floor) {
                 Some(layer) => {
                     match layer.get_mut(&p1) {
@@ -411,57 +441,16 @@ pub mod routes {
             }
         }
 
-        pub fn new() -> DualHashMap<usize, usize, Vec<usize>> {
+        pub fn new() -> DualHashMap {
             let data: HashMap<String, HashMap<usize, HashMap<usize, Vec<usize>>>> = HashMap::new();
 
             DualHashMap { data }
         }
-    }
 
-    // Generate a standard HashMap from Concurrent (only for saving purposes)
-    pub fn convert_concurrent(
-        concurrent: ConcurrentHashMap,
-    ) -> DualHashMap<usize, usize, Vec<usize>> {
-        let mut map: DualHashMap<usize, usize, Vec<usize>> = DualHashMap::new();
+        pub fn save(&self, path: String) {
+            let file = BufWriter::new(File::create(path).unwrap());
 
-        for (floor, outer) in concurrent.routes {
-            for (p1, inner) in outer {
-                for (p2, path) in inner {
-                    map.insert(&floor, p1, p2, path);
-                }
-            }
-        }
-        map
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct Save {
-        layer: String,
-        p1: usize,
-        p2: usize,
-        path: Vec<usize>,
-    }
-
-    pub fn save_paths(data: DualHashMap<usize, usize, Vec<usize>>) {
-        let mut paths: Vec<Save> = Vec::new();
-
-        for (layer, floor) in data.data {
-            for (p1, outer) in floor {
-                for (p2, path) in outer {
-                    paths.push(Save {
-                        layer: layer.clone(),
-                        p1,
-                        p2,
-                        path,
-                    });
-                }
-            }
-        }
-
-        let mut file = BufWriter::new(File::create("resources/routes/routes.bin").unwrap());
-
-        for path in paths {
-            serialize_into(&mut file, &path).unwrap();
+            serialize_into(file, self).expect("[ERROR] Cannot write data");
         }
     }
 }
