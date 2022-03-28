@@ -12,7 +12,7 @@ fn main() {
     println!("Welcome to Pandorast!");
 
     let configuration =
-        config::configuration::Parameters::load_configuration(String::from("config.toml"));
+        config::configuration::Parameters::load_configuration(String::from("IoTwins_config.toml"));
 
     let world = iotwins::world::create_world(configuration);
 

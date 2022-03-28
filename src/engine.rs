@@ -130,35 +130,50 @@ pub mod matrix {
 }
 
 pub mod path_finding {
-    use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-    use std::collections::BinaryHeap;
-    use std::{cmp::Ordering, thread::current};
+    use std::{cmp::Ordering, collections::{BinaryHeap, BTreeMap}};
 
     // A* algorithm form origin to destination, grid must be squared
     // origin and destination will be supposed to be in grid. Blueprint should be passed.
     pub fn a_star(gt: &[u8], origin: usize, destination: usize, grid_size: usize) -> Vec<usize> {
         // Generates  heuristic field (parallel way) the closer you get, the lower is the penalization (like gradient descend)
         let cost_function: Vec<u64> = gt
-            .par_iter()
+            .iter()
             .enumerate()
             .map(|(i, _)| heuristic(i, grid_size))
             .collect();
 
         let mut dist: Vec<u64> = (0..cost_function.len()).map(|_| u64::MAX).collect(); // Initial cost (inf)
-        let mut heap = Vec::new();
+        let mut heap: BinaryHeap<State> = BinaryHeap::new();
+
+        // Key will be previous visited
+        let mut visited: BTreeMap<usize, State> = BTreeMap::new();
 
         // Cost at origin is None (0)
         dist[origin] = 0;
 
-        heap.push(State {
-            cost: 0_u64,               // Initial cost (None)
-            position: origin,          // Initial position
-            path: Vec::from([origin]), // Starting point
-        });
+        let original_state = State {
+            cost: 0_u64,      // Initial cost (None)
+            position: origin, // Initial position
+            previous_p: origin,
+        };
+
+        heap.push(original_state);
+
+        visited.insert(destination, original_state);
 
         while let Some(current_state) = heap.pop() {
             if current_state.position == destination {
-                return current_state.path;
+
+                let mut p = current_state.previous_p;
+                let mut path = Vec::new();
+
+                while let Some(position) = visited.get(&p) {
+                    path.push(position.position);
+                    p = position.previous_p;
+                }
+
+                // Reveresed the reversed path, getting the good one
+                return path.into_iter().rev().collect()
             }
 
             if current_state.cost > dist[current_state.position] {
@@ -178,17 +193,17 @@ pub mod path_finding {
                     if new_cost < dist[pos] {
                         // Update new cost
                         dist[pos] = new_cost;
-                        let mut new_path = current_state.path.clone();
-                        new_path.push(pos);
 
-                        heap.push(State {
+                        let new_state = State {
                             cost: new_cost,
                             position: pos,
-                            path: new_path,
-                        });
+                            previous_p: current_state.position,
+                        };
+
+                        heap.push(new_state);
+                        visited.insert(current_state.position, new_state);
                     }
-                }
-            );
+                });
         }
 
         // This is for Rust's compiler hapinness; a route will always be find, is an undirected graph
@@ -197,6 +212,7 @@ pub mod path_finding {
 
     // Basic heuristic function, derivate-like where as you get closer to the target, the cost reduces
     // Diagonal values taking into account, should be adapted for obstacles
+    // Chebyshev distance heuristic function
     #[inline(always)]
     fn heuristic(pos: usize, grid_size: usize) -> u64 {
         let row = pos / grid_size;
@@ -233,14 +249,16 @@ pub mod path_finding {
         positions
     }
 
-    // Converting BinaryHeap from max-heap to min-heap (A*)
+    // Converting BinaryHeap from max-heap to min-heap (reversed comparation)
     // Includes  State, Ord and PartialOrd
-    #[derive(Eq, PartialEq)]
+    #[derive(Eq, PartialEq, Clone, Copy)]
     struct State {
         cost: u64,
         position: usize,
-        path: Vec<usize>,
+        previous_p: usize,
     }
+
+    
 
     impl Ord for State {
         fn cmp(&self, other: &State) -> Ordering {

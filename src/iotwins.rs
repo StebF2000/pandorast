@@ -181,7 +181,7 @@ pub mod model {
 pub mod world {
 
     use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
-    use rayon::iter::{IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
+    use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
     use serde::{Deserialize, Serialize};
     use std::{
         collections::{BinaryHeap, HashMap, HashSet},
@@ -192,7 +192,11 @@ pub mod world {
     use crate::{
         config::configuration::Parameters,
         engine::matrix::Matrix,
-        engine::{self, matrix::Position, routes::{ConcurrentHashMap, DualHashMap}},
+        engine::{
+            self,
+            matrix::Position,
+            routes::{ConcurrentHashMap, DualHashMap},
+        },
         iotwins::{
             self,
             model::{self, Arrival},
@@ -408,7 +412,7 @@ pub mod world {
                         .template(
                             "{spinner} {elapsed_precise} {bar:20} {pos}/{len} [{percent}% - {eta_precise}]",
                         ).progress_chars("#>-"));
-            // End of progress bar 
+            // End of progress bar
 
             // Generate all vertex
             central
@@ -847,8 +851,7 @@ pub mod world {
     }
 
     impl World {
-        pub fn default_paths(&self) -> DualHashMap {
-
+        pub fn default_paths(&self) {
             println!("[INFO] Finding routes");
 
             let routes = ConcurrentHashMap::new();
@@ -874,9 +877,6 @@ pub mod world {
                     // Converts vector to FIFO queue, this way we get rid of recomputating paths
                     while let Some(stair) = stairs_position.pop() {
 
-                        // This could be removed for greater performance
-                        let total = stairs_position.len();
-
                         stair.iter().for_each(|position| {
                             let destinations: Vec<usize> =
                                 stairs_position.iter().flatten().copied().collect();
@@ -884,16 +884,14 @@ pub mod world {
                             // Progress bar
                             let progress_bar =
                                 ProgressBar::new(destinations.len().try_into().unwrap());
-                            
-                            progress_bar.set_message(format!("{level} -> {total}"));
+
+                            progress_bar.set_message(level.to_string());
 
                             progress_bar.set_style(
                                 ProgressStyle::default_spinner()
                                     .template(
-                                        "{spinner} {elapsed_precise} [{msg}] {bar:10} {pos}/{len} ({eta_precise})",
-                                    )
-                                    .progress_chars("#>-"),
-                            );
+                                        "{spinner} {msg} {elapsed_precise} {bar:10} {pos}/{len} [{percent}% - {eta_precise}]",
+                                    ).progress_chars("#>#-"));
                             // End of progress bar
 
                             destinations
@@ -912,13 +910,17 @@ pub mod world {
                             );
                         });
                     }
-                });
 
-            let std_routes = routes.convert_concurrent();
+                    let std_routes = routes.convert_concurrent();
 
-            std_routes.save("paths.bin".to_string());
+                    let file_path = format!("resources/627/paths/{level}.json");
 
-            std_routes
+                    let file = File::create(file_path).expect("[ERROR] No write permissions");
+
+                    serde_json::to_writer(file, &std_routes).expect("[ERROR] No file");
+
+                }
+            );
         }
 
         fn get_layer_stairs(&self, layer: String) -> Vec<MapJump> {
@@ -936,7 +938,7 @@ pub mod world {
 
         println!("[INFO] Creating world");
 
-        floors.into_iter().progress().for_each(|(floor, path)| {
+        floors.into_iter().for_each(|(floor, path)| {
             let layer = Floor::load_floor(
                 floor.to_string(),
                 path.to_string(),
