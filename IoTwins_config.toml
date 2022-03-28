@@ -1,0 +1,92 @@
+[output]
+results_dir = "./data/"
+results_file = "IoTwins.h5"
+logs_file = "IoTwins.logs"
+
+[num_steps]
+value = 7800
+serialize_resolution = 1
+
+[seed]
+value = 10
+
+[logs]
+print_in_console = true
+print_instrumentation = true
+
+[mpi]
+overlap_size_mpi = 10
+subpartitioning_mode = 4
+uneven_partitioning = true
+
+[mpi_auto_adjustment]
+auto_mode = true
+rebalancing_freq = 100
+initial_partitioning = 4
+maximum_load_per_node = 0.1
+maximum_perc_of_unbalance = 200.0
+
+[checkpointing]
+enable_checkpointing = false
+load_checkpoint = false
+seconds_to_cp = 60
+directory_cp = "./checkpointing/"
+file_name_cp = "checkpointTest"
+periodic_cp = false
+seconds_for_periodic_cp = 20
+
+[size]
+height = 627
+width = 627
+
+[input_data]
+num_agents = 32000
+num_counters = 3
+
+[venue_tags]
+gates_info = "resources/627/tagging/gates.csv"
+mouths_info = "resources/627/tagging/mouths.csv"
+arrivals_info_csv = "resources/627/tagging/arrivals.csv"
+
+[match_timings]
+match_start = -90.0
+seconds_per_step = 0.3
+distribute_agents_along_minutes = true
+
+[topology]
+layout_pb = "resources/627/maps/EA_PB_pandora_627px.png"
+layout_p05 = "resources/627/maps/EA_P0-5_pandora_627px.png"
+layout_p1 = "resources/627/maps/EA_P1_pandora_627px.png"
+layout_p15 = "resources/627/maps/EA_P1-5_pandora_627px.png"
+layout_p2 = "resources/627/maps/EA_P2_pandora_627px.png"
+layout_p3 = "resources/627/maps/EA_P3_pandora_627px.png"
+layout_p35 = "resources/627/maps/EA_P3-5_pandora_627px.png"
+layout_p4 = "resources/627/maps/EA_P4_pandora_627px.png"
+layout_p5 = "resources/627/maps/EA_P5_pandora_627px.png"
+layout_s1 = "resources/627/maps/EA_S1_pandora_627px.png"
+
+[agent_data]
+min_vision = 1
+max_vision = 10
+min_velocity = 1
+max_velocity = 1
+min_age = 0
+max_age = 80
+porv_tourist = 0.8
+min_wall_distance = 0
+max_wall_distance = 1
+min_agent_distance = 2
+max_agent_distance = 5
+max_distance_b_agents = 10
+prov_follow = 10
+prov_museum = 31
+
+[coefficients]
+calpha = 1
+cbeta = 1
+cdelta = 0.8
+csigma = 0.01
+ualpha = 1
+ubeta = 1
+udelta = 0.01
+usigma = 0.01
