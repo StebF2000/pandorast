@@ -131,8 +131,8 @@ pub mod matrix {
 
 pub mod path_finding {
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-    use std::cmp::Ordering;
     use std::collections::BinaryHeap;
+    use std::{cmp::Ordering, thread::current};
 
     // A* algorithm form origin to destination, grid must be squared
     // origin and destination will be supposed to be in grid. Blueprint should be passed.
@@ -145,7 +145,7 @@ pub mod path_finding {
             .collect();
 
         let mut dist: Vec<u64> = (0..cost_function.len()).map(|_| u64::MAX).collect(); // Initial cost (inf)
-        let mut heap = BinaryHeap::new();
+        let mut heap = Vec::new();
 
         // Cost at origin is None (0)
         dist[origin] = 0;
@@ -156,43 +156,39 @@ pub mod path_finding {
             path: Vec::from([origin]), // Starting point
         });
 
-        while let Some(State {
-            cost,
-            position,
-            path,
-        }) = heap.pop()
-        {
-            // Stop at destination
-            if position == destination {
-                return path;
+        while let Some(current_state) = heap.pop() {
+            if current_state.position == destination {
+                return current_state.path;
             }
 
-            // Better route already found
-            if cost > dist[position] {
+            if current_state.cost > dist[current_state.position] {
                 continue;
             }
 
-            // Computes new heuristic (inlined for compiler optimization purposes)
-            movements(position, grid_size, gt)
+            movements(current_state.position, grid_size, gt)
                 .into_iter()
                 .filter(|pos| pos < &(grid_size * grid_size))
                 .for_each(|pos| {
                     // Cost towards next step (actual cost + step + heuristic)
-                    let new_cost = cost + 1_u64 + cost_function[pos];
+                    let new_cost =
+                        current_state.cost + 1_u64 + cost_function[current_state.position];
 
                     // Next aviable position (node) with current route
                     // If so, add it to the frontier and continue
                     if new_cost < dist[pos] {
                         // Update new cost
                         dist[pos] = new_cost;
+                        let mut new_path = current_state.path.clone();
+                        new_path.push(pos);
 
                         heap.push(State {
                             cost: new_cost,
                             position: pos,
-                            path: Vec::from([pos]),
+                            path: new_path,
                         });
                     }
-                });
+                }
+            );
         }
 
         // This is for Rust's compiler hapinness; a route will always be find, is an undirected graph
