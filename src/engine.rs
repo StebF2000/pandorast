@@ -130,7 +130,12 @@ pub mod matrix {
 }
 
 pub mod path_finding {
-    use std::{cmp::Ordering, collections::{BinaryHeap, BTreeMap}};
+    use std::{
+        cell::RefCell,
+        cmp::Ordering,
+        collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList},
+        rc::{Rc, Weak},
+    };
 
     // A* algorithm form origin to destination, grid must be squared
     // origin and destination will be supposed to be in grid. Blueprint should be passed.
@@ -145,8 +150,7 @@ pub mod path_finding {
         let mut dist: Vec<u64> = (0..cost_function.len()).map(|_| u64::MAX).collect(); // Initial cost (inf)
         let mut heap: BinaryHeap<State> = BinaryHeap::new();
 
-        // Key will be previous visited
-        let mut visited: BTreeMap<usize, State> = BTreeMap::new();
+        let mut list: BTreeMap<usize, State> = BTreeMap::new();
 
         // Cost at origin is None (0)
         dist[origin] = 0;
@@ -154,26 +158,25 @@ pub mod path_finding {
         let original_state = State {
             cost: 0_u64,      // Initial cost (None)
             position: origin, // Initial position
-            previous_p: origin,
+            previous: origin,
         };
 
         heap.push(original_state);
-
-        visited.insert(destination, original_state);
+        list.insert(original_state.position, original_state);
 
         while let Some(current_state) = heap.pop() {
             if current_state.position == destination {
-
-                let mut p = current_state.previous_p;
+                let mut state = current_state;
                 let mut path = Vec::new();
 
-                while let Some(position) = visited.get(&p) {
-                    path.push(position.position);
-                    p = position.previous_p;
+                // Backtracking. The state popped is the most recent version thus, the optimal one
+                while let Some(p) = list.remove(&state.previous) {
+                    path.push(p.position);
+                    state = p;
                 }
 
                 // Reveresed the reversed path, getting the good one
-                return path.into_iter().rev().collect()
+                return path.into_iter().rev().collect();
             }
 
             if current_state.cost > dist[current_state.position] {
@@ -194,14 +197,16 @@ pub mod path_finding {
                         // Update new cost
                         dist[pos] = new_cost;
 
+                        // This way the last iteration is saved
+                        list.insert(current_state.position, current_state);
+
                         let new_state = State {
                             cost: new_cost,
                             position: pos,
-                            previous_p: current_state.position,
+                            previous: current_state.position,
                         };
 
                         heap.push(new_state);
-                        visited.insert(current_state.position, new_state);
                     }
                 });
         }
@@ -255,10 +260,8 @@ pub mod path_finding {
     struct State {
         cost: u64,
         position: usize,
-        previous_p: usize,
+        previous: usize,
     }
-
-    
 
     impl Ord for State {
         fn cmp(&self, other: &State) -> Ordering {

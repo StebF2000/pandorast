@@ -868,7 +868,7 @@ pub mod world {
                         .data
                         .to_vec();
 
-                    // Stairs position on layer
+                    // Stairs position on layer (Constantly less than 15 elements)
                     let mut stairs_position: Vec<Vec<usize>> = stairs
                         .iter()
                         .map(|jump| jump.location.to_vec())
@@ -894,6 +894,7 @@ pub mod world {
                                     ).progress_chars("#>#-"));
                             // End of progress bar
 
+                            // Multiple search
                             destinations
                                 .par_iter()
                                 .progress_with(progress_bar)
@@ -905,7 +906,9 @@ pub mod world {
                                         627,
                                     );
 
-                                    routes.insert(level.to_string(), *position, *destination, path);
+                                    if !path.is_empty() {
+                                        routes.insert(level.to_string(), *position, *destination, path);
+                                    }
                                 }
                             );
                         });
@@ -921,13 +924,8 @@ pub mod world {
 
                 }
             );
-        }
 
-        fn get_layer_stairs(&self, layer: String) -> Vec<MapJump> {
-            self.stairs
-                .get(&layer)
-                .expect("[ERROR] No such layer")
-                .to_vec()
+            //TODO: Gates to mouths
         }
     }
 
