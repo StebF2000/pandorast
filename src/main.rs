@@ -16,10 +16,12 @@ fn main() {
 
     let world = iotwins::world::create_world(configuration);
 
-    // iotwins::world::MapJump::save_locations(&world.stairs, String::from("locations"));
+    iotwins::world::MapJump::save_locations(
+        &world.stairs,
+        String::from("resources/627/map_jumps/locations"),
+    );
 
     let paths = world.default_paths();
 
     println!("{:?}", paths);
-
 }

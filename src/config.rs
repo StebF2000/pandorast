@@ -1,8 +1,8 @@
 pub mod configuration {
 
-    use std::{fs::File, io::Write};
-    use serde::Deserialize;
     use crate::iotwins::model;
+    use serde::Deserialize;
+    use std::{fs::File, io::Write};
 
     #[derive(Debug, Deserialize)]
     struct Output {
@@ -19,8 +19,8 @@ pub mod configuration {
 
     #[derive(Debug, Deserialize)]
     struct Size {
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
     }
 
     #[derive(Debug, Deserialize)]
@@ -62,7 +62,7 @@ pub mod configuration {
         }
 
         // Grid size for computation
-        pub fn get_world_size(&self) -> (u32, u32) {
+        pub fn get_world_size(&self) -> (usize, usize) {
             (self.size.height, self.size.width)
         }
 

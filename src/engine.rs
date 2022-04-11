@@ -4,35 +4,28 @@ pub mod matrix {
     use std::hash::{Hash, Hasher};
     use std::{collections::HashMap, fs::File, io::Write};
 
-    use crate::iotwins::model::Agent;
-
-    #[derive(Debug, Clone)]
+    #[derive(Clone)]
     pub struct Matrix<T> {
         pub data: Vec<T>,
-        n_rows: u32,
-        n_cols: u32,
+        pub n_rows: usize, // For position purposes
     }
 
-    impl Matrix<u64> {
+    impl Matrix<u8> {
         // Given a HashMap, converts blueprint to a standard form for path finding algorithm to work in
         // Codification should be stablised for obstacles (value = 1)
         pub fn ground_thruth(layer: &Matrix<u8>, codification: HashMap<u8, u8>) -> Matrix<u8> {
             let gt: Vec<u8> = layer
                 .data
                 .iter()
-                .map(|value| {
-                    if let Some(important) = codification.get(value) {
-                        *important
-                    } else {
-                        0_u8
-                    }
+                .map(|value| match codification.get(value) {
+                    Some(value) => *value,
+                    _ => 0_u8,
                 })
                 .collect();
 
             Matrix {
                 data: gt,
                 n_rows: layer.n_rows,
-                n_cols: layer.n_cols,
             }
         }
 
@@ -46,24 +39,16 @@ pub mod matrix {
 
             Matrix {
                 data: image.as_raw().to_vec(),
-                n_rows: image.height(),
-                n_cols: image.width(),
+                n_rows: image.height() as usize,
             }
         }
 
         // Generates an empty matrix. Agent-intended
-        pub fn new(size: (u32, u32)) -> Matrix<u64> {
+        pub fn new(size: (usize, usize)) -> Matrix<u64> {
             Matrix {
                 data: vec![0_u64; (size.0 * size.1) as usize],
                 n_rows: size.0,
-                n_cols: size.1,
             }
-        }
-
-        // Update agent position
-        pub fn matrix_movement(&mut self, agent: &Agent, position: usize) {
-            self.data[agent.position] = 0;
-            self.data[position] = agent.id;
         }
 
         pub fn write_data(&self) {
@@ -75,7 +60,7 @@ pub mod matrix {
         }
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq)]
+    #[derive(Clone, Copy, Serialize, Deserialize, Eq)]
     pub struct Position {
         pub x: i32,
         pub y: i32,
@@ -95,7 +80,7 @@ pub mod matrix {
     }
 
     impl Position {
-        pub fn closest(&self, others: Vec<Position>) -> usize {
+        pub fn closest(&self, others: Vec<Position>) -> Option<usize> {
             let mut dist = i32::MAX;
             let mut closest = 0;
 
@@ -108,8 +93,11 @@ pub mod matrix {
                     closest = idx;
                 }
             });
-
-            closest
+            // 10 pixels of distance, no sqrt is done
+            match dist < 100 {
+                true => Some(closest),
+                false => None,
+            }
         }
 
         pub fn middle(data: Vec<Position>) -> Position {
@@ -131,26 +119,29 @@ pub mod matrix {
 
 pub mod path_finding {
     use std::{
-        cell::RefCell,
         cmp::Ordering,
-        collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet, LinkedList},
-        rc::{Rc, Weak},
+        collections::{BinaryHeap, HashMap},
     };
+
+    use crate::engine::matrix::Matrix;
 
     // A* algorithm form origin to destination, grid must be squared
     // origin and destination will be supposed to be in grid. Blueprint should be passed.
-    pub fn a_star(gt: &[u8], origin: usize, destination: usize, grid_size: usize) -> Vec<usize> {
+    pub fn a_star(gt: &Matrix<u8>, origin: usize, destination: usize) -> Vec<usize> {
         // Generates  heuristic field (parallel way) the closer you get, the lower is the penalization (like gradient descend)
         let cost_function: Vec<u64> = gt
+            .data
             .iter()
             .enumerate()
-            .map(|(i, _)| heuristic(i, grid_size))
+            .map(|(i, _)| heuristic(i, gt.n_rows))
             .collect();
 
         let mut dist: Vec<u64> = (0..cost_function.len()).map(|_| u64::MAX).collect(); // Initial cost (inf)
         let mut heap: BinaryHeap<State> = BinaryHeap::new();
 
-        let mut list: BTreeMap<usize, State> = BTreeMap::new();
+        // Trackinkg State for each position in dist matrix
+        // Better performance
+        let mut list: HashMap<usize, State> = HashMap::new();
 
         // Cost at origin is None (0)
         dist[origin] = 0;
@@ -178,14 +169,14 @@ pub mod path_finding {
                 // Reveresed the reversed path, getting the good one
                 return path.into_iter().rev().collect();
             }
-
+            // If cost is over current best, current_state is discarded
             if current_state.cost > dist[current_state.position] {
                 continue;
             }
 
-            movements(current_state.position, grid_size, gt)
+            movements(current_state.position, gt)
                 .into_iter()
-                .filter(|pos| pos < &(grid_size * grid_size))
+                .filter(|pos| pos < &(gt.n_rows * gt.n_rows))
                 .for_each(|pos| {
                     // Cost towards next step (actual cost + step + heuristic)
                     let new_cost =
@@ -226,8 +217,8 @@ pub mod path_finding {
         std::cmp::max(row, col) as u64
     }
 
-    fn movements(position: usize, grid_size: usize, gt: &[u8]) -> Vec<usize> {
-        let row_pos = position / grid_size;
+    fn movements(position: usize, gt: &Matrix<u8>) -> Vec<usize> {
+        let row_pos = position / gt.n_rows;
 
         let mut positions = Vec::with_capacity(4);
 
@@ -240,16 +231,16 @@ pub mod path_finding {
             }
             _ => {
                 positions = Vec::from([
-                    position - grid_size,
+                    position - gt.n_rows,
                     position - 1,
                     position + 1,
-                    position + grid_size,
+                    position + gt.n_rows,
                 ]);
             }
         }
 
         // Remove out of matrix and walls position (inplace)
-        positions.retain(|pos| pos < &(grid_size * grid_size) && gt[*pos] != 1);
+        positions.retain(|pos| -> bool { pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1 });
 
         positions
     }
@@ -288,7 +279,7 @@ pub mod routes {
     use serde::{Deserialize, Serialize};
 
     // Allows for parallel insertion using rayon
-    #[derive(Debug, Clone)]
+    #[derive(Clone)]
     pub struct ConcurrentHashMap {
         pub routes: DashMap<String, DashMap<usize, DashMap<usize, Vec<usize>>>>,
     }
@@ -388,7 +379,7 @@ pub mod routes {
         concurrent
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize)]
     pub struct DualHashMap {
         // Layer -> Origin -> Destination -> path
         data: HashMap<String, HashMap<usize, HashMap<usize, Vec<usize>>>>,

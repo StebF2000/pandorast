@@ -44,7 +44,6 @@ pub mod model {
         layout_p35: String,
         layout_p4: String,
         layout_p5: String,
-        layout_s1: String,
     }
 
     impl Topology {
@@ -192,11 +191,7 @@ pub mod world {
     use crate::{
         config::configuration::Parameters,
         engine::matrix::Matrix,
-        engine::{
-            self,
-            matrix::Position,
-            routes::{ConcurrentHashMap, DualHashMap},
-        },
+        engine::{self, matrix::Position, routes::ConcurrentHashMap},
         iotwins::{
             self,
             model::{self, Arrival},
@@ -278,7 +273,7 @@ pub mod world {
     pub fn load_gates(path: String) -> HashMap<String, Vec<usize>> {
         let mut gates: HashMap<String, Vec<usize>> = HashMap::new();
 
-        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found");
+        let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found"); 
 
         for result in reader.deserialize() {
             let record: Gate = result.expect("[ERROR] Incorrect gate format");
@@ -296,7 +291,7 @@ pub mod world {
         gates
     }
 
-    #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+    #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
     pub struct MapJump {
         pub location: Vec<usize>,
         position: Position,
@@ -311,7 +306,7 @@ pub mod world {
             let mut jumps: HashMap<String, HashMap<u8, Vec<Vec<usize>>>> = HashMap::new();
             let mut central: HashMap<String, HashMap<u8, Vec<Position>>> = HashMap::new();
 
-            print!("[INFO] Detecting structures\t");
+            println!("[INFO] Detecting structures");
 
             // Generate nodes
             building.iter().for_each(|(layer, floor)| {
@@ -344,7 +339,7 @@ pub mod world {
                 // Simplified version of the blueprints its used, based on GT layer
                 simple_ground
                     .into_iter()
-                    .progress_with(progress_bar)
+                    // .progress_with(progress_bar)
                     .enumerate()
                     .for_each(|(position, value)| {
                         if value != 255
@@ -455,17 +450,16 @@ pub mod world {
                                             if !possible_groups.is_empty()
                                                 && !possible_links.is_empty()
                                             {
-                                                let closest_idx = Position::closest(
+                                                match Position::closest(
                                                     position,
                                                     possible_links.to_vec(),
-                                                );
-
-                                                let group = &possible_groups[closest_idx];
-
-                                                conexions.insert(
-                                                    destination.to_string(),
-                                                    group.to_vec(),
-                                                );
+                                                ) {
+                                                    Some(closest) => conexions.insert(
+                                                        destination.to_string(),
+                                                        possible_groups[closest].to_vec(),
+                                                    ),
+                                                    None => None,
+                                                };
                                             }
                                         });
 
@@ -501,17 +495,16 @@ pub mod world {
                                             if !possible_groups.is_empty()
                                                 && !possible_links.is_empty()
                                             {
-                                                let closest_idx = Position::closest(
+                                                match Position::closest(
                                                     position,
                                                     possible_links.to_vec(),
-                                                );
-
-                                                let group = &possible_groups[closest_idx];
-
-                                                conexions.insert(
-                                                    destination.to_string(),
-                                                    group.to_vec(),
-                                                );
+                                                ) {
+                                                    Some(closest) => conexions.insert(
+                                                        destination.to_string(),
+                                                        possible_groups[closest].to_vec(),
+                                                    ),
+                                                    None => None,
+                                                };
                                             }
                                         });
 
@@ -547,17 +540,16 @@ pub mod world {
                                             if !possible_groups.is_empty()
                                                 && !possible_links.is_empty()
                                             {
-                                                let closest_idx = Position::closest(
+                                                match Position::closest(
                                                     position,
                                                     possible_links.to_vec(),
-                                                );
-
-                                                let group = &possible_groups[closest_idx];
-
-                                                conexions.insert(
-                                                    destination.to_string(),
-                                                    group.to_vec(),
-                                                );
+                                                ) {
+                                                    Some(closest) => conexions.insert(
+                                                        destination.to_string(),
+                                                        possible_groups[closest].to_vec(),
+                                                    ),
+                                                    None => None,
+                                                };
                                             }
                                         });
 
@@ -606,12 +598,13 @@ pub mod world {
                                         .expect("[ERROR]");
 
                                     if !possible_groups.is_empty() && !possible_links.is_empty() {
-                                        let closest_idx =
-                                            Position::closest(position, possible_links.to_vec());
-
-                                        let group = &possible_groups[closest_idx];
-
-                                        conexions.insert(destination.to_string(), group.to_vec());
+                                        match Position::closest(position, possible_links.to_vec()) {
+                                            Some(closest) => conexions.insert(
+                                                destination.to_string(),
+                                                possible_groups[closest].to_vec(),
+                                            ),
+                                            None => continue,
+                                        };
                                     }
                                 }
 
@@ -644,15 +637,16 @@ pub mod world {
 
                                         if !possible_groups.is_empty() && !possible_links.is_empty()
                                         {
-                                            let closest_idx = Position::closest(
+                                            match Position::closest(
                                                 position,
                                                 possible_links.to_vec(),
-                                            );
-
-                                            let group = &possible_groups[closest_idx];
-
-                                            conexions
-                                                .insert(destination.to_string(), group.to_vec());
+                                            ) {
+                                                Some(closest) => conexions.insert(
+                                                    destination.to_string(),
+                                                    possible_groups[closest].to_vec(),
+                                                ),
+                                                None => None,
+                                            };
                                         }
                                     });
 
@@ -686,15 +680,16 @@ pub mod world {
 
                                         if !possible_groups.is_empty() && !possible_links.is_empty()
                                         {
-                                            let closest_idx = Position::closest(
+                                            match Position::closest(
                                                 position,
                                                 possible_links.to_vec(),
-                                            );
-
-                                            let group = &possible_groups[closest_idx];
-
-                                            conexions
-                                                .insert(destination.to_string(), group.to_vec());
+                                            ) {
+                                                Some(closest) => conexions.insert(
+                                                    destination.to_string(),
+                                                    possible_groups[closest].to_vec(),
+                                                ),
+                                                None => None,
+                                            };
                                         }
                                     });
 
@@ -713,8 +708,6 @@ pub mod world {
                     building_mapping.insert(layer.to_string(), layer_vec);
                 }
             });
-
-            println!("[DONE]");
 
             building_mapping
         }
@@ -794,7 +787,7 @@ pub mod world {
         }
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone)]
     pub struct Floor {
         name: String,
         blueprint: Matrix<u8>,
@@ -803,7 +796,7 @@ pub mod world {
     }
 
     impl Floor {
-        fn load_floor(floor: String, path: String, size: (u32, u32)) -> Floor {
+        fn load_floor(floor: String, path: String, size: (usize, usize)) -> Floor {
             let blueprint = Matrix::load_layer(&path);
 
             Floor {
@@ -840,7 +833,6 @@ pub mod world {
         }
     }
 
-    #[derive(Debug)]
     pub struct World {
         pub building: HashMap<String, Floor>,
         step: u64,
@@ -854,26 +846,25 @@ pub mod world {
         pub fn default_paths(&self) {
             println!("[INFO] Finding routes");
 
-            let routes = ConcurrentHashMap::new();
-
             self.stairs
                 .iter()
                 .for_each(|(level, stairs)| {
+
+                    let routes = ConcurrentHashMap::new();
+
                     // Ground thruth
-                    let floor_gt = self
+                    let floor_gt = &self
                         .building
                         .get(level)
                         .expect("[ERROR] No such layer")
-                        .ground_truth
-                        .data
-                        .to_vec();
+                        .ground_truth;
 
                     // Stairs position on layer (Constantly less than 15 elements)
                     let mut stairs_position: Vec<Vec<usize>> = stairs
                         .iter()
                         .map(|jump| jump.location.to_vec())
                         .collect();
-
+                    
                     // Converts vector to FIFO queue, this way we get rid of recomputating paths
                     while let Some(stair) = stairs_position.pop() {
 
@@ -885,7 +876,7 @@ pub mod world {
                             let progress_bar =
                                 ProgressBar::new(destinations.len().try_into().unwrap());
 
-                            progress_bar.set_message(level.to_string());
+                            progress_bar.set_message(format!("{} - {}", level, stairs_position.len()));
 
                             progress_bar.set_style(
                                 ProgressStyle::default_spinner()
@@ -900,10 +891,9 @@ pub mod world {
                                 .progress_with(progress_bar)
                                 .for_each(|destination| {
                                     let path = engine::path_finding::a_star(
-                                        &floor_gt,
+                                        floor_gt,
                                         *position,
-                                        *destination,
-                                        627,
+                                        *destination
                                     );
 
                                     if !path.is_empty() {
@@ -921,7 +911,6 @@ pub mod world {
                     let file = File::create(file_path).expect("[ERROR] No write permissions");
 
                     serde_json::to_writer(file, &std_routes).expect("[ERROR] No file");
-
                 }
             );
 
