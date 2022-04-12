@@ -1,9 +1,17 @@
 mod config;
 mod engine;
-mod iotwins;
+
+mod iotwins_model {
+    pub mod config;
+    pub mod stadium;
+    pub mod structures;
+    pub mod world;
+}
 
 // Microsoft memory allocator for performance
 use mimalloc::MiMalloc;
+
+use crate::iotwins_model::{structures, world};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -14,9 +22,9 @@ fn main() {
     let configuration =
         config::configuration::Parameters::load_configuration(String::from("IoTwins_config.toml"));
 
-    let world = iotwins::world::create_world(configuration);
+    let world = world::simulation::create_world(configuration);
 
-    iotwins::world::MapJump::save_locations(
+    structures::tagging::Jump::save_locations(
         &world.stairs,
         String::from("resources/627/map_jumps/locations"),
     );

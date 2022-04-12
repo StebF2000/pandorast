@@ -1,10 +1,10 @@
 pub mod configuration {
 
-    use crate::iotwins::model;
     use serde::Deserialize;
     use std::{fs::File, io::Write};
+    use crate::iotwins_model::config;
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Deserialize)]
     struct Output {
         results_dir: String,
         results_file: String,
@@ -29,7 +29,7 @@ pub mod configuration {
         num_counters: u32,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Deserialize)]
     pub struct Parameters {
         // General engine configuration
         output: Output,
@@ -38,11 +38,11 @@ pub mod configuration {
         input_data: Simulation,
 
         // Model-specific configuration
-        agent_data: model::AgentStats,
-        coefficients: model::Coeffs,
-        pub topology: model::Topology,
-        pub venue_tags: model::Venue,
-        match_timings: model::Match,
+        agent_data: config::model::AgentStats,
+        coefficients: config::model::Coeffs,
+        pub topology: config::model::Topology,
+        pub venue_tags: config::model::Venue,
+        match_timings: config::model::Match,
     }
 
     impl Parameters {
@@ -87,17 +87,17 @@ pub mod configuration {
         }
 
         // Agent characteristics for simulation
-        pub fn get_agent_info(&self) -> model::AgentStats {
+        pub fn get_agent_info(&self) -> config::model::AgentStats {
             self.agent_data
         }
 
         // Agent randomization coefficients
-        pub fn get_agent_coeffs(&self) -> model::Coeffs {
+        pub fn get_agent_coeffs(&self) -> config::model::Coeffs {
             self.coefficients
         }
 
         // Match information for simulation
-        pub fn get_match_info(&self) -> model::Match {
+        pub fn get_match_info(&self) -> config::model::Match {
             self.match_timings
         }
 
