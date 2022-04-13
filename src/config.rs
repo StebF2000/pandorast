@@ -1,8 +1,8 @@
 pub mod configuration {
 
+    use crate::iotwins_model::config;
     use serde::Deserialize;
     use std::{fs::File, io::Write};
-    use crate::iotwins_model::config;
 
     #[derive(Deserialize)]
     struct Output {

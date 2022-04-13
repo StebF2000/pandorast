@@ -29,6 +29,46 @@ pub mod matrix {
             }
         }
 
+        pub fn contiguous(&self, position: usize) -> Vec<usize> {
+            let limit = self.n_rows;
+
+            let row_pos = position / limit;
+
+            match row_pos {
+                0 => {
+                    // First row
+                    Vec::from([
+                        position - 1,
+                        position + 1,
+                        position + (limit - 1),
+                        position + limit,
+                        position + (limit + 1),
+                    ])
+                }
+                627 => {
+                    // Last row
+                    Vec::from([
+                        position - (limit + 1),
+                        position - limit,
+                        position - (limit - 1),
+                        position - 1,
+                        position + 1,
+                    ])
+                }
+                _ => Vec::from([
+                    // Any other row
+                    position - (limit + 1),
+                    position - limit,
+                    position - (limit - 1),
+                    position - 1,
+                    position + 1,
+                    position + (limit - 1),
+                    position + limit,
+                    position + (limit + 1),
+                ]),
+            }
+        }
+
         // Load blueprint from resources
         pub fn load_layer(path: &str) -> Matrix<u8> {
             let image = ImageReader::open(path)
@@ -80,21 +120,34 @@ pub mod matrix {
     }
 
     impl Position {
+        pub fn new(idx: usize) -> Position {
+            Position {
+                x: (idx / 627) as i32,
+                y: (idx % 627) as i32,
+            }
+        }
+
         pub fn closest(&self, others: Vec<Position>) -> Option<usize> {
-            let mut dist = i32::MAX;
+            if others.is_empty() {
+                return None;
+            }
+
+            let mut dist = f32::MAX;
             let mut closest = 0;
 
             others.into_iter().enumerate().for_each(|(idx, position)| {
                 // Fast euclidean distance
-                let d = i32::pow(self.x - position.x, 2) + i32::pow(self.y - position.y, 2);
+                let d = ((i32::pow(self.x - position.x, 2) + i32::pow(self.y - position.y, 2))
+                    as f32)
+                    .sqrt();
 
                 if d < dist {
                     dist = d;
                     closest = idx;
                 }
             });
-            // 10 pixels of distance, no sqrt is done
-            match dist < 100 {
+            // 10 pixels of distance
+            match dist < 10.0 {
                 true => Some(closest),
                 false => None,
             }
@@ -123,7 +176,7 @@ pub mod path_finding {
         collections::{BinaryHeap, HashMap},
     };
 
-    use crate::engine::matrix::Matrix;
+    use crate::engine::{matrix::Matrix, path_finding};
 
     // A* algorithm form origin to destination, grid must be squared
     // origin and destination will be supposed to be in grid. Blueprint should be passed.
@@ -133,14 +186,14 @@ pub mod path_finding {
             .data
             .iter()
             .enumerate()
-            .map(|(i, _)| heuristic(i, gt.n_rows))
+            .map(|(i, _)| path_finding::heuristic(i, gt.n_rows))
             .collect();
 
         let mut dist: Vec<u64> = (0..cost_function.len()).map(|_| u64::MAX).collect(); // Initial cost (inf)
         let mut heap: BinaryHeap<State> = BinaryHeap::new();
 
         // Trackinkg State for each position in dist matrix
-        // Better performance
+        // Better performance than cloning an array
         let mut list: HashMap<usize, State> = HashMap::new();
 
         // Cost at origin is None (0)
@@ -174,7 +227,7 @@ pub mod path_finding {
                 continue;
             }
 
-            movements(current_state.position, gt)
+            path_finding::movements(current_state.position, gt)
                 .into_iter()
                 .filter(|pos| pos < &(gt.n_rows * gt.n_rows))
                 .for_each(|pos| {
@@ -455,10 +508,10 @@ pub mod routes {
             DualHashMap { data }
         }
 
-        pub fn save(&self, path: String) {
-            let file = BufWriter::new(File::create(path).unwrap());
+        // pub fn save(&self, path: String) {
+        //     let file = BufWriter::new(File::create(path).unwrap());
 
-            serialize_into(file, self).expect("[ERROR] Cannot write data");
-        }
+        //     serialize_into(file, self).expect("[ERROR] Cannot write data");
+        // }
     }
 }
