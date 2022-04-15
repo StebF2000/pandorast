@@ -33,7 +33,7 @@ impl World {
                     // Empty HashMap for each layer
                     let routes = ConcurrentHashMap::new();
                     
-                    // Cloned stairs
+                    // Cloned stairs for avoiding computation
                     let mut layer_stairs = stairs.clone();
 
                     // Ground thruth
@@ -54,8 +54,8 @@ impl World {
                     // Converts vector to FIFO queue, this way we get rid of recomputating paths
                     while let Some(stair) = layer_stairs.pop() {
 
-                        // Matrix location for all other structures in `stair` influence area
-                        let destinations: Vec<usize> = stair.influence_area(stairs, 300.0).iter().flat_map(|j| j.location.to_vec()).collect();
+                        // Matrix location for all other structures in `stair` influence area, removing
+                        let destinations: Vec<usize> = stair.influence_area(&layer_stairs, 300.0).iter().flat_map(|j| j.location.to_vec()).collect();
 
                         stair.location.iter().for_each(|position| {
 
