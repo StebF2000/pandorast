@@ -12,7 +12,7 @@ use std::{
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Jump {
     pub location: Vec<usize>,
-    position: Position,
+    pub position: Position,
     pub conexions: HashMap<String, Vec<usize>>,
 }
 
@@ -46,12 +46,8 @@ impl Jump {
                 .into_iter()
                 .enumerate()
                 .for_each(|(idx, value)| {
-                    if value != 255
-                        && !already_visited.contains(&idx)
-                        && points.contains(&value)
-                    {
-                        let (facility, mov) =
-                            Jump::find_structure(&floor.ground_truth, idx, value);
+                    if value != 255 && !already_visited.contains(&idx) && points.contains(&value) {
+                        let (facility, mov) = Jump::find_structure(&floor.ground_truth, idx, value);
 
                         let pos: Vec<Position> =
                             facility.iter().map(|p| Position::new(*p)).collect();
@@ -114,8 +110,9 @@ impl Jump {
 
                 match jump_type {
                     10 => {
-                        zip(positions, structures).into_iter().for_each(
-                            |(position, location)| {
+                        zip(positions, structures)
+                            .into_iter()
+                            .for_each(|(position, location)| {
                                 let conexions = Jump::get_conexions(
                                     position,
                                     &destination_layers,
@@ -129,12 +126,12 @@ impl Jump {
                                     position: *position,
                                     conexions,
                                 });
-                            },
-                        );
+                            });
                     }
                     11 => {
-                        zip(positions, structures).into_iter().for_each(
-                            |(position, location)| {
+                        zip(positions, structures)
+                            .into_iter()
+                            .for_each(|(position, location)| {
                                 let conexions = Jump::get_conexions(
                                     position,
                                     &destination_layers,
@@ -148,12 +145,12 @@ impl Jump {
                                     position: *position,
                                     conexions,
                                 });
-                            },
-                        );
+                            });
                     }
                     _ => {
-                        zip(positions, structures).into_iter().for_each(
-                            |(position, location)| {
+                        zip(positions, structures)
+                            .into_iter()
+                            .for_each(|(position, location)| {
                                 let conexions = Jump::get_conexions(
                                     position,
                                     &destination_layers,
@@ -167,8 +164,7 @@ impl Jump {
                                     position: *position,
                                     conexions,
                                 });
-                            },
-                        );
+                            });
                     }
                 }
             });
@@ -234,13 +230,21 @@ impl Jump {
             let possible_locations = jumps.get(layer).expect("").get(target).expect("");
 
             match Position::closest(position, possible_positions.to_vec()) {
-                Some(idx) => {
-                    conexions.insert(layer.to_string(), possible_locations[idx].to_vec())
-                }
+                Some(idx) => conexions.insert(layer.to_string(), possible_locations[idx].to_vec()),
                 None => None,
             };
         });
 
         conexions
+    }
+
+    /// Returns all jumps inside the influence area
+    pub fn influence_area(&self, counterparts: &[Jump], area_size: f32) -> Vec<Jump> {
+        counterparts
+            .iter()
+            .filter(|counter| {
+                self.position.distance(counter.position) < area_size
+            }).map(|counter| counter.to_owned())
+            .collect()
     }
 }

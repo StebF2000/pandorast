@@ -136,10 +136,7 @@ pub mod matrix {
             let mut closest = 0;
 
             others.into_iter().enumerate().for_each(|(idx, position)| {
-                // Fast euclidean distance
-                let d = ((i32::pow(self.x - position.x, 2) + i32::pow(self.y - position.y, 2))
-                    as f32)
-                    .sqrt();
+                let d = Position::distance(&self, position);
 
                 if d < dist {
                     dist = d;
@@ -166,6 +163,12 @@ pub mod matrix {
                 x: x / data.len() as i32,
                 y: y / data.len() as i32,
             }
+        }
+
+        #[inline(always)]
+        /// Euclidean distance
+        pub fn distance(&self, other: Position) -> f32 {
+            ((i32::pow(self.x - other.x, 2) + i32::pow(self.y - other.y, 2)) as f32).sqrt()
         }
     }
 }

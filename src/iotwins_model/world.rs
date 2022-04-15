@@ -32,6 +32,9 @@ impl World {
 
                     // Empty HashMap for each layer
                     let routes = ConcurrentHashMap::new();
+                    
+                    // Cloned stairs
+                    let mut layer_stairs = stairs.clone();
 
                     // Ground thruth
                     let floor_gt = &self
@@ -40,23 +43,27 @@ impl World {
                         .expect("[ERROR] No such layer")
                         .ground_truth;
 
-                    // Stairs position on layer (Constantly less than 15 elements)
-                    let mut stairs_position: Vec<Vec<usize>> = stairs
-                        .iter()
-                        .map(|jump| jump.location.to_vec())
-                        .collect();
-                    // Converts vector to FIFO queue, this way we get rid of recomputating paths
-                    while let Some(stair) = stairs_position.pop() {
+                    // // Stairs position on layer
+                    // let mut stairs_position: Vec<Vec<usize>> = stairs
+                    //     .iter()
+                    //     .map(|jump| jump.location.to_vec())
+                    //     .collect();
+                    
+                    // TODO: Change this to the new influence area 
 
-                        stair.iter().for_each(|position| {
-                            let destinations: Vec<usize> =
-                                stairs_position.iter().flatten().copied().collect();
+                    // Converts vector to FIFO queue, this way we get rid of recomputating paths
+                    while let Some(stair) = layer_stairs.pop() {
+
+                        // Matrix location for all other structures in `stair` influence area
+                        let destinations: Vec<usize> = stair.influence_area(stairs, 300.0).iter().flat_map(|j| j.location.to_vec()).collect();
+
+                        stair.location.iter().for_each(|position| {
 
                             // Progress bar
                             let progress_bar =
                                 ProgressBar::new(destinations.len().try_into().unwrap());
 
-                            progress_bar.set_message(format!("{} - {}", level, stairs_position.len()));
+                            progress_bar.set_message(format!("{} - {}", level, layer_stairs.len()));
 
                             progress_bar.set_style(
                                 ProgressStyle::default_spinner()
@@ -95,7 +102,6 @@ impl World {
             );
 
         //TODO: Gates to mouths
-        
     }
 }
 
@@ -125,4 +131,3 @@ pub fn create_world(configuration: Parameters) -> World {
         building,
     }
 }
-
