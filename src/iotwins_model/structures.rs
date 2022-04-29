@@ -1,250 +1,223 @@
-use crate::{
-    engine::matrix::{Matrix, Position},
-    iotwins_model::stadium::Floor,
-};
+use crate::engine::matrix::{Matrix, Position};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BinaryHeap, HashMap, HashSet},
-    fs::File,
+    collections::{hash_map::Entry, HashMap, HashSet},
     iter::zip,
 };
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub struct Jump {
-    pub location: Vec<usize>,
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone)]
+pub struct Structure {
     pub position: Position,
-    pub conexions: HashMap<String, Vec<usize>>,
+    pub location: Vec<usize>,
 }
 
-impl Jump {
-    pub fn find_locations(building: &HashMap<String, Floor>) -> HashMap<String, Vec<Jump>> {
-        let points: HashSet<u8> = HashSet::from([10, 11, 3]);
+pub fn generate_structures(ground_truth: &Matrix<u8>) -> HashMap<u8, HashSet<Structure>> {
+    let mut visited = HashSet::with_capacity(ground_truth.n_rows);
 
-        // This will define the position of each facility
-        let mut jumps: HashMap<String, HashMap<u8, Vec<Vec<usize>>>> = HashMap::new();
-        let mut central: HashMap<String, HashMap<u8, Vec<Position>>> = HashMap::new();
+    // let mut elevators: Vec<Vec<usize>> = Vec::new();
+    let mut up_stairs: Vec<Vec<usize>> = Vec::new();
+    let mut down_stairs: Vec<Vec<usize>> = Vec::new();
+    // let mut elevators: Vec<Vec<usize>> = Vec::new();
 
-        println!("[INFO] Detecting structures");
+    // let mut elevators_pos: Vec<Position> = Vec::new();
+    let mut up_stairs_pos: Vec<Position> = Vec::new();
+    let mut down_stairs_pos: Vec<Position> = Vec::new();
+    // let mut elevators_pos: Vec<Position> = Vec::new();
 
-        // Find structures
-        building.iter().for_each(|(layer, floor)| {
-            let mut already_visited: HashSet<usize> =
-                HashSet::with_capacity(floor.blueprint.data.len());
-
-            let mut elevators: Vec<Vec<usize>> = Vec::new();
-            let mut up_stairs: Vec<Vec<usize>> = Vec::new();
-            let mut down_stairs: Vec<Vec<usize>> = Vec::new();
-
-            let mut elevators_pos: Vec<Position> = Vec::new();
-            let mut up_stairs_pos: Vec<Position> = Vec::new();
-            let mut down_stairs_pos: Vec<Position> = Vec::new();
-
-            let simple_ground = floor.ground_truth.data.clone();
-
-            // Simplified version of the blueprints its used, based on GT layer
-            simple_ground
-                .into_iter()
-                .enumerate()
-                .for_each(|(idx, value)| {
-                    if value != 255 && !already_visited.contains(&idx) && points.contains(&value) {
-                        let (facility, mov) = Jump::find_structure(&floor.ground_truth, idx, value);
-
-                        let pos: Vec<Position> =
-                            facility.iter().map(|p| Position::new(*p)).collect();
-
-                        already_visited.extend(facility.to_vec());
-
-                        match mov {
-                            10 => {
-                                down_stairs.push(facility);
-                                down_stairs_pos.push(Position::middle(pos));
-                            }
-                            11 => {
-                                up_stairs.push(facility);
-                                up_stairs_pos.push(Position::middle(pos));
-                            }
-                            _ => {
-                                elevators.push(facility);
-                                elevators_pos.push(Position::middle(pos));
-                            }
-                        }
-                    }
-                });
-
-            // Store results for later conexion (nodes)
-            jumps.insert(
-                layer.to_string(),
-                HashMap::from([(10, down_stairs), (11, up_stairs), (3, elevators)]),
-            );
-
-            central.insert(
-                layer.to_string(),
-                HashMap::from([
-                    (10, down_stairs_pos),
-                    (11, up_stairs_pos),
-                    (3, elevators_pos),
-                ]),
-            );
-        });
-
-        let layers: Vec<String> = central.keys().into_iter().map(|k| k.to_string()).collect();
-
-        let mut building_mapping: HashMap<String, Vec<Jump>> = HashMap::new();
-
-        // Link counterpart structures
-        central.iter().for_each(|(layer, position_hash)| {
-            let structure_hash = jumps.get(layer).expect("");
-
-            // Get all other layers
-            let destination_layers: Vec<String> = layers
-                .iter()
-                .filter(|l| l.to_string() != *layer)
-                .map(|l| l.to_string())
-                .collect();
-
-            // Store jumps for each layer
-            let mut layer_vec: Vec<Jump> = Vec::new();
-
-            position_hash.iter().for_each(|(jump_type, positions)| {
-                let structures = structure_hash.get(jump_type).expect("");
-
-                match jump_type {
-                    10 => {
-                        zip(positions, structures)
-                            .into_iter()
-                            .for_each(|(position, location)| {
-                                let conexions = Jump::get_conexions(
-                                    position,
-                                    &destination_layers,
-                                    &11,
-                                    &central,
-                                    &jumps,
-                                );
-
-                                layer_vec.push(Jump {
-                                    location: location.to_vec(),
-                                    position: *position,
-                                    conexions,
-                                });
-                            });
-                    }
-                    11 => {
-                        zip(positions, structures)
-                            .into_iter()
-                            .for_each(|(position, location)| {
-                                let conexions = Jump::get_conexions(
-                                    position,
-                                    &destination_layers,
-                                    &10,
-                                    &central,
-                                    &jumps,
-                                );
-
-                                layer_vec.push(Jump {
-                                    location: location.to_vec(),
-                                    position: *position,
-                                    conexions,
-                                });
-                            });
-                    }
-                    _ => {
-                        zip(positions, structures)
-                            .into_iter()
-                            .for_each(|(position, location)| {
-                                let conexions = Jump::get_conexions(
-                                    position,
-                                    &destination_layers,
-                                    &3,
-                                    &central,
-                                    &jumps,
-                                );
-
-                                layer_vec.push(Jump {
-                                    location: location.to_vec(),
-                                    position: *position,
-                                    conexions,
-                                });
-                            });
-                    }
-                }
-            });
-
-            if !layer_vec.is_empty() {
-                building_mapping.insert(layer.to_string(), layer_vec);
-            }
-        });
-
-        building_mapping
-    }
-
-    // Indicate folder location only
-    pub fn save_locations(locations: &HashMap<String, Vec<Jump>>, path: String) {
-        locations.iter().for_each(|(layer, locations)| {
-            let file_path = format!("{path}-{layer}.json");
-
-            let file = File::create(file_path).expect("[ERROR] No write permissions");
-
-            serde_json::to_writer(file, locations).expect("[ERROR] No file");
-        });
-
-        println!("[INFO] Locations saved");
-    }
-
-    pub fn load_locations() -> HashMap<String, Vec<Jump>> {
-        todo!()
-    }
-
-    fn find_structure(floor: &Matrix<u8>, position: usize, x: u8) -> (Vec<usize>, u8) {
-        let mut facility: HashSet<usize> = HashSet::from([position]);
-
-        let mut surroundings = BinaryHeap::from(floor.contiguous(position));
-
-        while let Some(pos) = surroundings.pop() {
-            // If same structure
-            // TODO: add Index & IndexMut traits
-            if floor.data[pos] == x && !facility.contains(&pos) {
-                facility.insert(pos);
-                // Add contiguous positions
-                floor
-                    .contiguous(position)
-                    .iter()
-                    .for_each(|new_pos| surroundings.push(*new_pos));
-            }
+    for (idx, value) in ground_truth.data.iter().enumerate() {
+        // Skip already visited locations and useless positions
+        if visited.contains(&idx) || !HashSet::from([10, 11]).contains(value) {
+            continue;
         }
 
-        (facility.into_iter().collect(), x)
+        let facility = find_structure(ground_truth, idx, &mut visited);
+
+        match value {
+            // Down-stairs
+            10 => {
+                down_stairs_pos.push(Position::middle_location(&facility));
+                down_stairs.push(facility);
+            }
+            // UP-stairs
+            11 => {
+                up_stairs_pos.push(Position::middle_location(&facility));
+                up_stairs.push(facility);
+            }
+            // Elevators
+            // 3 => {
+            //     elevators_pos.push(Position::middle_location(&facility));
+            //     elevators.push(facility);
+            // }
+            _ => {}
+        }
     }
 
-    fn get_conexions(
-        position: &Position,
-        destination_layers: &[String],
-        target: &u8,
-        central: &HashMap<String, HashMap<u8, Vec<Position>>>,
-        jumps: &HashMap<String, HashMap<u8, Vec<Vec<usize>>>>,
-    ) -> HashMap<String, Vec<usize>> {
-        let mut conexions: HashMap<String, Vec<usize>> = HashMap::new();
+    // Generate paths
+    let down_stair: HashSet<Structure> = HashSet::from_iter(
+        zip(down_stairs, down_stairs_pos)
+            .map(|(location, position)| Structure { position, location }),
+    );
 
-        // Loop through layers to find if there is a close one
-        destination_layers.iter().for_each(|layer| {
-            let possible_positions = central.get(layer).expect("").get(target).expect("");
-            let possible_locations = jumps.get(layer).expect("").get(target).expect("");
+    let up_stair: HashSet<Structure> = HashSet::from_iter(
+        zip(up_stairs, up_stairs_pos).map(|(location, position)| Structure { position, location }),
+    );
 
-            match Position::closest(position, possible_positions.to_vec()) {
-                Some(idx) => conexions.insert(layer.to_string(), possible_locations[idx].to_vec()),
-                None => None,
-            };
-        });
+    // let elevator: HashSet<Structure> = HashSet::from_iter(
+    //     zip(elevators, elevators_pos).map(|(location, position)| Structure { position, location }),
+    // );
 
-        conexions
+    // Reduce size as much as posible
+    let mut relation = HashMap::from([(10, down_stair), (11, up_stair)]);
+    relation.shrink_to_fit();
+
+    relation
+}
+
+#[derive(Deserialize)]
+struct RawMouth {
+    mouth: String,
+    layer: String,
+    x: usize,
+    y: usize,
+}
+
+pub fn load_mouths(layer: &String) -> HashMap<u16, Structure> {
+    let mut mouths: HashMap<u16, Vec<usize>> = HashMap::new();
+
+    let mut reader = csv::Reader::from_path("resources/627/tagging/mouths.csv")
+        .expect("[ERROR] Mouths file not found");
+
+    for result in reader.deserialize() {
+        let record: RawMouth = result.expect("[ERROR] Incorrect mouth format");
+
+        // Filter correct layer
+        if record.layer != *layer {
+            continue;
+        }
+
+        // If mouth is not present is created, otherwise pushes the new location
+        record
+            .mouth
+            .split('-')
+            .map(|s| s.parse::<u16>().unwrap())
+            .for_each(|mouth| match mouths.entry(mouth) {
+                Entry::Occupied(mut location) => {
+                    location.get_mut().push(627 * record.x + record.y);
+                }
+                Entry::Vacant(location) => {
+                    location.insert(vec![627 * record.x + record.y]);
+                }
+            });
     }
 
-    /// Returns all jumps inside the influence area
-    pub fn influence_area(&self, counterparts: &[Jump], area_size: f32) -> Vec<Jump> {
-        counterparts
-            .iter()
-            .filter(|counter| {
-                self.position.distance(counter.position) < area_size
-            }).map(|counter| counter.to_owned())
-            .collect()
+    let data = mouths.into_iter().map(|(id, location)| {
+        (
+            id,
+            Structure {
+                position: Position::middle_location(&location),
+                location: location.to_vec(),
+            },
+        )
+    });
+
+    // Reduce size
+    let mut m = HashMap::from_iter(data);
+    m.shrink_to_fit();
+    m
+}
+
+#[derive(Deserialize)]
+struct RawGate {
+    layer: String,
+    gate: String,
+    x: usize,
+    y: usize,
+}
+
+/// HashMap of initial points (Gates). Key => usize position on matrix PB
+pub fn load_gates() -> HashMap<String, HashMap<String, Structure>> {
+    let mut gates: HashMap<String, HashMap<String, Vec<usize>>> = HashMap::new();
+
+    let mut reader = csv::Reader::from_path("resources/627/tagging/gates.csv")
+        .expect("[ERROR] Gates file not found");
+
+    // HashMap of initial points (Gates). Key => usize position on matrix PB
+    for result in reader.deserialize() {
+        let record: RawGate = result.expect("[ERROR] Incorrect gate format");
+
+        match gates.get_mut(&record.layer) {
+            Some(gates) => match gates.get_mut(&record.gate) {
+                Some(location) => location.push(627 * record.x + record.y),
+                None => {
+                    gates.insert(record.gate, vec![627 * record.x + record.y]);
+                }
+            },
+            None => {
+                let mut data = HashMap::from([(record.gate, vec![627 * record.x + record.y])]);
+                data.shrink_to_fit();
+
+                gates.insert(record.layer, data);
+            }
+        }
     }
+
+    let mut data = HashMap::from_iter(gates.into_iter().map(|(layer, gates)| {
+        (
+            layer,
+            HashMap::from_iter(gates.into_iter().map(|(id, location)| {
+                (
+                    id,
+                    Structure {
+                        location: location.to_vec(),
+                        position: Position::middle_location(&location),
+                    },
+                )
+            })),
+        )
+    }));
+
+    // Reduce size
+    data.shrink_to_fit();
+    data
+}
+
+// /// Returns all jumps inside the influence area
+// fn influence_area(&self, counterparts: &[Jump], area_size: f32) -> Vec<Jump> {
+//     counterparts
+//         .iter()
+//         .filter(|counter| self.position.distance(counter.position) < area_size)
+//         .map(|counter| counter.to_owned())
+//         .collect()
+// }
+
+fn find_structure(
+    ground_truth: &Matrix<u8>,
+    position: usize,
+    visited: &mut HashSet<usize>,
+) -> Vec<usize> {
+    let x = ground_truth.data[position];
+
+    // This way there are no duplicate positions
+    let mut facility: HashSet<usize> = HashSet::from([position]);
+
+    let mut surroundings: Vec<usize> = ground_truth.contiguous(position);
+
+    while let Some(pos) = surroundings.pop() {
+        // If same structure do not visit again
+
+        if ground_truth.data[pos] == x {
+            visited.insert(pos);
+            facility.insert(pos);
+
+            let next_positions: Vec<usize> = ground_truth
+                .contiguous(pos)
+                .into_iter()
+                .filter(|pos| !visited.contains(pos))
+                .collect();
+
+            surroundings.extend(next_positions);
+        }
+    }
+
+    facility.into_iter().collect()
 }

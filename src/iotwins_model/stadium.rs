@@ -1,69 +1,14 @@
-use crate::engine::matrix::Matrix;
+use crate::{
+    engine::matrix::Matrix,
+    iotwins_model::{
+        routes::{find_route, Route},
+        structures::{generate_structures, load_mouths, Structure},
+    },
+};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
+use rayon::prelude::*;
 use serde::Deserialize;
-use std::collections::HashMap;
-
-#[derive(Deserialize)]
-struct Mouth {
-    mouth: String,
-    layer: String,
-    x: u32,
-    y: u32,
-}
-
-/// HashMap of Hashmap. First by layer then by  mouth. Key => usize position in matrix
-pub fn load_mouths(path: String) -> HashMap<String, HashMap<i16, Vec<usize>>> {
-    let mut mouths: HashMap<String, HashMap<i16, Vec<usize>>> = HashMap::new();
-
-    let mut reader = csv::Reader::from_path(path).expect("[ERROR] Mouths file not found");
-
-    for result in reader.deserialize() {
-        let record: Mouth = result.expect("[ERROR] Incorrect mouth format");
-
-        let multiple: Vec<i16> = record
-            .mouth
-            .split('-')
-            .map(|s| s.parse().unwrap())
-            .collect();
-
-        match mouths.get_mut(&record.layer) {
-            Some(layer) => {
-                // Mouth is present in HashMap. Only position pushed
-                for section in multiple {
-                    // Some mouths feed people to the same grandstand
-                    match layer.get_mut(&section) {
-                        Some(m) => {
-                            m.push((627 * record.x + record.y) as usize);
-                        }
-                        None => {
-                            // Mouth not in HashMap. Gate vector position is created
-                            layer.insert(section, vec![(627 * record.x + record.y) as usize]);
-                        }
-                    }
-                }
-            }
-            None => {
-                let layer = record.layer.clone();
-                // Layer key on HashMap does not exist. All has to be created
-                mouths.insert(record.layer, HashMap::new());
-
-                if let Some(layer) = mouths.get_mut(&layer) {
-                    // Mouth is present in HashMap. Only position pushed
-                    for section in multiple {
-                        // Some mouths feed people to the same grandstand
-                        if let Some(m) = layer.get_mut(&section) {
-                            m.push((627 * record.x + record.y) as usize);
-                        } else {
-                            // Mouth not in HashMap. Gate vector position is created
-                            layer.insert(section, vec![(627 * record.x + record.y) as usize]);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    mouths
-}
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Deserialize)]
 struct Gate {
@@ -96,25 +41,118 @@ pub fn load_gates(path: String) -> HashMap<String, Vec<usize>> {
 
 #[derive(Clone)]
 pub struct Floor {
-    name: String,
-    pub blueprint: Matrix<u8>,
-    agents: Matrix<u64>,
     pub ground_truth: Matrix<u8>,
+    pub structures: HashMap<u8, HashSet<Structure>>, // Mapping Position -> matrix by type of structure
+    pub structures_paths: HashSet<Route>,
+    pub mouths: HashMap<u16, Structure>, // Agent destinations
+    pub mouths_paths: HashMap<u16, HashSet<Route>>, // From down-stairs -> mouths (grandstands)
 }
 
 impl Floor {
-    pub fn load_floor(floor: String, path: String, size: (usize, usize)) -> Floor {
-        let blueprint = Matrix::load_layer(&path);
+    pub fn create_floor(path: String, name: String) -> Floor {
+        let ground_truth = Floor::ground_truth(&Matrix::load_layer(&path));
+        let structures = generate_structures(&ground_truth);
+        let mouths = load_mouths(&name);
 
         Floor {
-            name: floor,
-            ground_truth: Floor::ground_truth(&blueprint),
-            blueprint,
-            agents: Matrix::new(size),
+            structures_paths: Floor::stairs_paths(&ground_truth, &structures, &name),
+            mouths_paths: Floor::mouth_paths(&ground_truth, &structures, &mouths, &name),
+            mouths,
+            structures,
+            ground_truth,
         }
     }
 
-    fn ground_truth(blueprint: &Matrix<u8>) -> Matrix<u8> {
+    pub fn load_floor(
+        path: String,
+        name: String,
+        mouths_paths: HashMap<u16, HashSet<Route>>,
+        structures_paths: HashSet<Route>,
+    ) -> Floor {
+        let mouths = load_mouths(&name);
+        let ground_truth = Floor::ground_truth(&Matrix::load_layer(&path));
+
+        Floor {
+            structures: generate_structures(&ground_truth),
+            ground_truth,
+            structures_paths,
+            mouths,
+            mouths_paths,
+        }
+    }
+
+    fn stairs_paths(
+        gt: &Matrix<u8>,
+        structures: &HashMap<u8, HashSet<Structure>>,
+        layer: &String,
+    ) -> HashSet<Route> {
+        let down = structures.get(&10).expect("");
+        let up = structures.get(&11).expect("");
+
+        // Progress bar
+        let progress_bar = ProgressBar::new(down.len().try_into().unwrap());
+
+        progress_bar.set_message(format!("{layer} - Map jumps"));
+
+        progress_bar.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner} {msg} {bar:10} {pos}/{len}")
+                .progress_chars("#>#-"),
+        );
+        // End of progress bar
+
+        let stairs_paths = down
+            .par_iter()
+            .progress_with(progress_bar)
+            .flat_map(|p1| up.par_iter().map(|p2| find_route(gt, p1, p2)));
+
+        let mut res = HashSet::from_par_iter(stairs_paths);
+        res.shrink_to_fit();
+
+        res
+    }
+
+    fn mouth_paths(
+        gt: &Matrix<u8>,
+        structures: &HashMap<u8, HashSet<Structure>>,
+        mouths: &HashMap<u16, Structure>,
+        layer: &String,
+    ) -> HashMap<u16, HashSet<Route>> {
+        // Down stairs are the only positions from where you can go to the grandstands, agents will arrive at down-stairs
+        let down = structures.get(&10).expect("");
+        // For each destination mouth, a set of possible routes from near stairs
+        let mut mouths_paths: HashMap<u16, HashSet<Route>> = HashMap::new();
+
+        // Progress bar
+        let progress_bar = ProgressBar::new(down.len().try_into().unwrap());
+
+        progress_bar.set_message(format!("{layer} - Mouths paths"));
+
+        progress_bar.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner} {msg} {bar:10} {pos}/{len}")
+                .progress_chars("#>#-"),
+        );
+        // End of progress bar
+
+        mouths
+            .iter()
+            .progress_with(progress_bar)
+            .for_each(|(id, mouth)| {
+                let mouth_routes: HashSet<Route> = HashSet::from_par_iter(
+                    down.par_iter().map(|stair| find_route(gt, stair, mouth)),
+                );
+
+                mouths_paths.insert(*id, mouth_routes);
+            });
+
+        // Reduce size
+        mouths_paths.shrink_to_fit();
+
+        mouths_paths
+    }
+
+    pub fn ground_truth(blueprint: &Matrix<u8>) -> Matrix<u8> {
         Matrix::ground_thruth(
             blueprint,
             HashMap::from([
@@ -137,5 +175,57 @@ impl Floor {
                 (182, 3),  // Elevator
             ]),
         )
+    }
+}
+
+pub mod arrivals {
+    use std::collections::HashMap;
+
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct RawArrival {
+        index: usize,
+        gate: String,
+        mouth: u16,
+        minutes_to_game: i32,
+        agents: u8,
+    }
+
+    #[derive(Debug)]
+    pub struct Arrival {
+        gate: String,
+        mouth: u16,
+        agents: u8,
+    }
+
+    pub fn load_arrivals() -> HashMap<i32, Vec<Arrival>> {
+        let mut arrivals: HashMap<i32, Vec<Arrival>> = HashMap::new();
+
+        let mut reader = csv::Reader::from_path("resources/627/tagging/arrivals.csv")
+            .expect("[ERROR] Arrivals file not found");
+
+        for result in reader.deserialize() {
+            let record: RawArrival = result.expect("[ERROR] Incorrect gate format");
+
+            match arrivals.entry(record.minutes_to_game) {
+                std::collections::hash_map::Entry::Occupied(mut arrivals) => {
+                    arrivals.get_mut().push(Arrival {
+                        gate: record.gate,
+                        mouth: record.mouth,
+                        agents: record.agents,
+                    });
+                }
+                std::collections::hash_map::Entry::Vacant(arrivals) => {
+                    arrivals.insert(vec![Arrival {
+                        gate: record.gate,
+                        mouth: record.mouth,
+                        agents: record.agents,
+                    }]);
+                }
+            }
+        }
+
+        arrivals
     }
 }

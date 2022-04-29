@@ -91,15 +91,15 @@ pub mod configuration {
             self.agent_data
         }
 
-        // Agent randomization coefficients
-        pub fn get_agent_coeffs(&self) -> config::model::Coeffs {
-            self.coefficients
-        }
+        // // Agent randomization coefficients
+        // pub fn get_agent_coeffs(&self) -> config::model::Coeffs {
+        //     self.coefficients
+        // }
 
-        // Match information for simulation
-        pub fn get_match_info(&self) -> config::model::Match {
-            self.match_timings
-        }
+        // // Match information for simulation
+        // pub fn get_match_info(&self) -> config::model::Match {
+        //     self.match_timings
+        // }
 
         // Total agents to be simulated
         pub fn total_agents(&self) -> u64 {

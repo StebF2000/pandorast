@@ -1,107 +1,59 @@
-use std::{collections::HashMap, fs::File};
-
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
-use rayon::prelude::*;
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+};
 
 use crate::{
     config::configuration::Parameters,
-    engine::{path_finding::a_star, routes::ConcurrentHashMap},
     iotwins_model::{
-        config::arrival::{self, Arrival},
+        routes::Route,
         stadium,
-        structures::Jump,
+        stadium::arrivals::{load_arrivals, Arrival},
+        structures::{load_gates, Structure},
     },
 };
 
 pub struct World {
     pub building: HashMap<String, stadium::Floor>,
     step: u64,
-    pub gates: HashMap<String, Vec<usize>>,
-    pub mouths: HashMap<String, HashMap<i16, Vec<usize>>>,
+    resolution: u8,
     pub arrivals: HashMap<i32, Vec<Arrival>>,
-    pub stairs: HashMap<String, Vec<Jump>>,
+    gates: HashMap<String, HashMap<String, Structure>>,
 }
 
 impl World {
-    pub fn default_paths(&self) {
-        println!("[INFO] Finding routes");
+    pub fn save_structures(&self) {
+        let mut data = HashMap::new();
 
-        self.stairs
-                .iter()
-                .for_each(|(level, stairs)| {
+        for (layer, floor) in &self.building {
+            data.insert(layer.to_string(), floor.structures.clone());
+        }
 
-                    // Empty HashMap for each layer
-                    let routes = ConcurrentHashMap::new();
-                    
-                    // Cloned stairs for avoiding computation
-                    let mut layer_stairs = stairs.clone();
+        let file = File::create("resources/627/map_jumps.json").expect("");
 
-                    // Ground thruth
-                    let floor_gt = &self
-                        .building
-                        .get(level)
-                        .expect("[ERROR] No such layer")
-                        .ground_truth;
+        serde_json::to_writer(file, &data).expect("");
+    }
 
-                    // // Stairs position on layer
-                    // let mut stairs_position: Vec<Vec<usize>> = stairs
-                    //     .iter()
-                    //     .map(|jump| jump.location.to_vec())
-                    //     .collect();
-                    
-                    // TODO: Change this to the new influence area 
+    pub fn save_paths(&self) {
+        let mut stairs_paths = HashMap::new();
+        let mut mouths_paths = HashMap::new();
 
-                    // Converts vector to FIFO queue, this way we get rid of recomputating paths
-                    while let Some(stair) = layer_stairs.pop() {
+        for (layer, floor) in &self.building {
+            stairs_paths.insert(layer.to_string(), floor.structures_paths.clone());
+            mouths_paths.insert(layer.to_string(), floor.mouths_paths.clone());
+        }
 
-                        // Matrix location for all other structures in `stair` influence area, removing
-                        let destinations: Vec<usize> = stair.influence_area(&layer_stairs, 300.0).iter().flat_map(|j| j.location.to_vec()).collect();
+        let file1 = File::create("resources/627/stairs_paths.json").expect("");
+        let file2 = File::create("resources/627/mouths_paths.json").expect("");
 
-                        stair.location.iter().for_each(|position| {
+        serde_json::to_writer(file1, &stairs_paths).expect("");
+        serde_json::to_writer(file2, &mouths_paths).expect("");
+    }
 
-                            // Progress bar
-                            let progress_bar =
-                                ProgressBar::new(destinations.len().try_into().unwrap());
+    fn load_agents(&self) {
+        let time = (self.step * self.resolution as u64) as i32;
 
-                            progress_bar.set_message(format!("{} - {}", level, layer_stairs.len()));
-
-                            progress_bar.set_style(
-                                ProgressStyle::default_spinner()
-                                    .template(
-                                        "{spinner} {msg} {elapsed_precise} {bar:10} {pos}/{len} [{percent}% - {eta_precise}]",
-                                    ).progress_chars("#>#-"));
-                            // End of progress bar
-
-                            // Multiple search
-                            destinations
-                                .par_iter()
-                                .progress_with(progress_bar)
-                                .for_each(|destination| {
-                                    let path = a_star(
-                                        floor_gt,
-                                        *position,
-                                        *destination
-                                    );
-
-                                    if !path.is_empty() {
-                                        routes.insert(level.to_string(), *position, *destination, path);
-                                    }
-                                }
-                            );
-                        });
-                    }
-
-                    let std_routes = routes.convert_concurrent();
-
-                    let file_path = format!("resources/627/paths/{level}.json");
-
-                    let file = File::create(file_path).expect("[ERROR] No write permissions");
-
-                    serde_json::to_writer(file, &std_routes).expect("[ERROR] No file");
-                }
-            );
-
-        //TODO: Gates to mouths
+        // let arrivals = self.arrivals
     }
 }
 
@@ -113,21 +65,62 @@ pub fn create_world(configuration: Parameters) -> World {
     println!("[INFO] Creating world");
 
     floors.into_iter().for_each(|(floor, path)| {
+        let layer = stadium::Floor::create_floor(path.to_string(), floor.to_string());
+
+        building.insert(floor.to_string(), layer);
+    });
+
+    World {
+        step: 0,
+        resolution: 15, // Seconds
+        arrivals: load_arrivals(),
+        building,
+        gates: load_gates(),
+    }
+}
+
+pub fn load_world(
+    structures_path: String,
+    mouths_paths_path: String,
+    structures_paths_path: String,
+    configuration: Parameters,
+) -> World {
+    println!("[INFO] Loading world...");
+
+    let mut building: HashMap<String, stadium::Floor> = HashMap::new();
+
+    // Load pre-computed stuff (routes and structures)
+    let structures_file = File::open(structures_path).expect("");
+    let mouths_paths_file = File::open(mouths_paths_path).expect("");
+    let structures_paths_file = File::open(structures_paths_path).expect("");
+
+    let structures: HashMap<String, HashMap<u8, HashSet<Structure>>> =
+        serde_json::from_reader(structures_file).expect("");
+
+    let mouths_paths: HashMap<String, HashMap<u16, HashSet<Route>>> =
+        serde_json::from_reader(mouths_paths_file).expect("");
+
+    let structures_paths: HashMap<String, HashSet<Route>> =
+        serde_json::from_reader(structures_paths_file).expect("");
+
+    let floors = configuration.topology.layers();
+
+    floors.into_iter().for_each(|(floor, path)| {
         let layer = stadium::Floor::load_floor(
-            floor.to_string(),
             path.to_string(),
-            configuration.get_world_size(),
+            floor.to_string(),
+            mouths_paths.get(&floor.to_string()).expect("").clone(),
+            structures_paths.get(&floor.to_string()).expect("").clone(),
         );
 
         building.insert(floor.to_string(), layer);
     });
 
     World {
-        stairs: Jump::find_locations(&building),
         step: 0,
-        gates: stadium::load_gates(configuration.venue_tags.gates_info),
-        mouths: stadium::load_mouths(configuration.venue_tags.mouths_info),
-        arrivals: arrival::load_arrivals(configuration.venue_tags.arrivals_info_csv),
+        resolution: 15, // Seconds
+        arrivals: load_arrivals(),
         building,
+        gates: load_gates(),
     }
 }

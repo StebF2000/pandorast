@@ -1,8 +1,8 @@
 pub mod matrix {
     use image::io::Reader as ImageReader;
     use serde::{Deserialize, Serialize};
+    use std::collections::HashMap;
     use std::hash::{Hash, Hasher};
-    use std::{collections::HashMap, fs::File, io::Write};
 
     #[derive(Clone)]
     pub struct Matrix<T> {
@@ -33,39 +33,65 @@ pub mod matrix {
             let limit = self.n_rows;
 
             let row_pos = position / limit;
+            let col_pos = position % limit;
 
             match row_pos {
-                0 => {
-                    // First row
-                    Vec::from([
+                // First row
+                0 => match col_pos {
+                    // First column
+                    0 => Vec::from([position + 1, position + limit, position + limit + 1]),
+                    // Last column
+                    626 => Vec::from([position - 1, position + limit, position + limit - 1]),
+                    _ => Vec::from([
+                        position - 1,
+                        position + 1,
+                        position + limit - 1,
+                        position + limit,
+                        position + limit + 1,
+                    ]),
+                },
+                // Last row
+                626 => match col_pos {
+                    // First column
+                    0 => Vec::from([position + 1, position - limit, position - limit + 1]),
+                    // Last column
+                    626 => Vec::from([position - 1, position - limit, position - limit - 1]),
+                    _ => Vec::from([
+                        position - 1,
+                        position + 1,
+                        position - limit - 1,
+                        position - limit,
+                        position - limit + 1,
+                    ]),
+                },
+                _ => match col_pos {
+                    // First column
+                    0 => Vec::from([
+                        position + 1,
+                        position - limit,
+                        position - limit + 1,
+                        position + limit,
+                        position + limit + 1,
+                    ]),
+                    // Last column
+                    626 => Vec::from([
+                        position - 1,
+                        position - limit,
+                        position - limit - 1,
+                        position + limit,
+                        position + limit - 1,
+                    ]),
+                    _ => Vec::from([
                         position - 1,
                         position + 1,
                         position + (limit - 1),
                         position + limit,
                         position + (limit + 1),
-                    ])
-                }
-                627 => {
-                    // Last row
-                    Vec::from([
-                        position - (limit + 1),
-                        position - limit,
                         position - (limit - 1),
-                        position - 1,
-                        position + 1,
-                    ])
-                }
-                _ => Vec::from([
-                    // Any other row
-                    position - (limit + 1),
-                    position - limit,
-                    position - (limit - 1),
-                    position - 1,
-                    position + 1,
-                    position + (limit - 1),
-                    position + limit,
-                    position + (limit + 1),
-                ]),
+                        position - limit,
+                        position - (limit + 1),
+                    ]),
+                },
             }
         }
 
@@ -77,33 +103,19 @@ pub mod matrix {
                 .unwrap()
                 .to_luma8();
 
+            image.save("test.png").expect("");
+
             Matrix {
                 data: image.as_raw().to_vec(),
                 n_rows: image.height() as usize,
             }
         }
-
-        // Generates an empty matrix. Agent-intended
-        pub fn new(size: (usize, usize)) -> Matrix<u64> {
-            Matrix {
-                data: vec![0_u64; (size.0 * size.1) as usize],
-                n_rows: size.0,
-            }
-        }
-
-        pub fn write_data(&self) {
-            let data: Vec<String> = self.data.iter().map(|n| n.to_string()).collect();
-
-            let mut file = File::create("test").expect("[ERROR]");
-
-            writeln!(file, "{}", data.join(", ")).expect("[Err]");
-        }
     }
 
-    #[derive(Clone, Copy, Serialize, Deserialize, Eq)]
+    #[derive(Clone, Copy, Eq, Serialize, Deserialize)]
     pub struct Position {
-        pub x: i32,
-        pub y: i32,
+        pub x: usize,
+        pub y: usize,
     }
 
     impl PartialEq for Position {
@@ -122,8 +134,8 @@ pub mod matrix {
     impl Position {
         pub fn new(idx: usize) -> Position {
             Position {
-                x: (idx / 627) as i32,
-                y: (idx % 627) as i32,
+                x: (idx / 627),
+                y: (idx % 627),
             }
         }
 
@@ -132,11 +144,11 @@ pub mod matrix {
                 return None;
             }
 
-            let mut dist = f32::MAX;
+            let mut dist = i32::MAX;
             let mut closest = 0;
 
             others.into_iter().enumerate().for_each(|(idx, position)| {
-                let d = Position::distance(&self, position);
+                let d = Position::distance(self, &position);
 
                 if d < dist {
                     dist = d;
@@ -144,13 +156,18 @@ pub mod matrix {
                 }
             });
             // 10 pixels of distance
-            match dist < 10.0 {
+            match dist < 10_i32.pow(2) {
                 true => Some(closest),
                 false => None,
             }
         }
 
-        pub fn middle(data: Vec<Position>) -> Position {
+        pub fn middle_location(data: &[usize]) -> Position {
+            let p: Vec<Position> = data.iter().map(|idx| Position::new(*idx)).collect();
+            Position::middle(&p)
+        }
+
+        pub fn middle(data: &[Position]) -> Position {
             let mut x = 0;
             let mut y = 0;
 
@@ -160,15 +177,16 @@ pub mod matrix {
             });
 
             Position {
-                x: x / data.len() as i32,
-                y: y / data.len() as i32,
+                x: x / data.len(),
+                y: y / data.len(),
             }
         }
 
         #[inline(always)]
         /// Euclidean distance
-        pub fn distance(&self, other: Position) -> f32 {
-            ((i32::pow(self.x - other.x, 2) + i32::pow(self.y - other.y, 2)) as f32).sqrt()
+        pub fn distance(&self, other: &Position) -> i32 {
+            i32::pow(self.x as i32 - other.x as i32, 2)
+                + i32::pow(self.y as i32 - other.y as i32, 2)
         }
     }
 }
@@ -273,32 +291,73 @@ pub mod path_finding {
         std::cmp::max(row, col) as u64
     }
 
-    fn movements(position: usize, gt: &Matrix<u8>) -> Vec<usize> {
+    pub fn movements(position: usize, gt: &Matrix<u8>) -> Vec<usize> {
         let row_pos = position / gt.n_rows;
-
-        let mut positions = Vec::with_capacity(4);
+        let col_pos = position % gt.n_rows;
 
         match row_pos {
+            // First row
             0 => {
-                positions = Vec::from([]);
+                match col_pos {
+                    // Last column item
+                    626 => Vec::from([position - 1, position + gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                    // First column item
+                    0 => Vec::from([position + 1, position + gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                    _ => Vec::from([position + 1, position - 1, position + gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                }
             }
-            627 => {
-                positions = Vec::from([]);
+            // Last row
+            626 => {
+                match col_pos {
+                    // Last column item
+                    626 => Vec::from([position - 1, position - gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                    // First column item
+                    0 => Vec::from([position + 1, position - gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                    _ => Vec::from([position + 1, position - 1, position - gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                }
             }
             _ => {
-                positions = Vec::from([
-                    position - gt.n_rows,
-                    position - 1,
-                    position + 1,
-                    position + gt.n_rows,
-                ]);
+                match col_pos {
+                    // Last column item
+                    626 => Vec::from([position - 1, position + gt.n_rows, position - gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                    // First column item
+                    0 => Vec::from([position + 1, position + gt.n_rows, position - gt.n_rows])
+                        .into_iter()
+                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                        .collect(),
+                    _ => Vec::from([
+                        position + 1,
+                        position - 1,
+                        position + gt.n_rows,
+                        position - gt.n_rows,
+                    ])
+                    .into_iter()
+                    .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                    .collect(),
+                }
             }
         }
-
-        // Remove out of matrix and walls position (inplace)
-        positions.retain(|pos| -> bool { pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1 });
-
-        positions
     }
 
     // Converting BinaryHeap from max-heap to min-heap (reversed comparation)
@@ -323,198 +382,5 @@ pub mod path_finding {
         fn partial_cmp(&self, other: &State) -> Option<Ordering> {
             Some(self.cmp(other))
         }
-    }
-}
-
-pub mod routes {
-
-    use std::{collections::HashMap, fs::File, io::BufWriter};
-
-    use bincode::serialize_into;
-    use dashmap::DashMap;
-    use serde::{Deserialize, Serialize};
-
-    // Allows for parallel insertion using rayon
-    #[derive(Clone)]
-    pub struct ConcurrentHashMap {
-        pub routes: DashMap<String, DashMap<usize, DashMap<usize, Vec<usize>>>>,
-    }
-
-    impl ConcurrentHashMap {
-        // Returns new empty route HashMap with concurrent insertion
-        pub fn new() -> Self {
-            ConcurrentHashMap {
-                routes: DashMap::new(),
-            }
-        }
-
-        // Generate a standard HashMap from Concurrent (only for saving purposes)
-        pub fn convert_concurrent(&self) -> DualHashMap {
-            let mut map: DualHashMap = DualHashMap::new();
-
-            for (floor, outer) in self.routes.clone() {
-                for (p1, inner) in outer {
-                    for (p2, path) in inner {
-                        map.insert(&floor, p1, p2, path);
-                    }
-                }
-            }
-            map
-        }
-
-        pub fn insert(&self, layer: String, origin: usize, destination: usize, path: Vec<usize>) {
-            match self.routes.get(&layer) {
-                Some(layer) => {
-                    match layer.get(&origin) {
-                        // Origin is present, direct insertion
-                        Some(mouth) => {
-                            mouth.insert(destination, path);
-                        }
-                        None => {
-                            match layer.get(&destination) {
-                                // Destination is present, inverse insertion
-                                Some(mouth) => {
-                                    mouth.insert(origin, path.into_iter().rev().collect());
-                                }
-                                None => {
-                                    // Layer exists, but no mouth is present
-                                    let dest = DashMap::new();
-                                    dest.insert(destination, path);
-                                    layer.insert(origin, dest);
-                                }
-                            }
-                        }
-                    }
-                }
-                None => {
-                    // Layer does not exist
-                    let floor = DashMap::new();
-                    let mouth = DashMap::new();
-
-                    mouth.insert(destination, path);
-                    floor.insert(origin, mouth);
-
-                    self.routes.insert(layer, floor);
-                }
-            }
-        }
-
-        pub fn get(&self, layer: String, origin: usize, destination: usize) -> Option<Vec<usize>> {
-            match self.routes.get(&layer) {
-                Some(layer) => {
-                    // Layer exists
-                    match layer.get(&origin) {
-                        // Origin exists
-                        Some(mouth) => mouth.get(&destination).map(|path| path.to_vec()),
-                        None => {
-                            match layer.get(&destination) {
-                                // Origin does not exist, destination does
-                                Some(mouth) => mouth.get(&origin).map(|path| path.to_vec()),
-                                None => None, // Layer exists, origin and destination does not
-                            }
-                        }
-                    }
-                }
-                None => None, // Layer does not exist
-            }
-        }
-    }
-
-    // Convert a standard HashMap to concurrent one
-    pub fn convert_standard(map: DualHashMap) -> ConcurrentHashMap {
-        let mut concurrent = ConcurrentHashMap::new();
-
-        for (layer, floor) in map.data {
-            for (p1, outer) in floor {
-                for (p2, path) in outer {
-                    concurrent.insert(layer.to_string(), p1, p2, path)
-                }
-            }
-        }
-
-        concurrent
-    }
-
-    #[derive(Serialize, Deserialize)]
-    pub struct DualHashMap {
-        // Layer -> Origin -> Destination -> path
-        data: HashMap<String, HashMap<usize, HashMap<usize, Vec<usize>>>>,
-    }
-
-    impl DualHashMap {
-        pub fn get(&self, layer: String, p1: usize, p2: usize) -> Option<Vec<usize>> {
-            match self.data.get(&layer) {
-                Some(layer) => {
-                    match layer.get(&p1) {
-                        // Forward path
-                        Some(mouth) => mouth.get(&p2).map(|path| path.to_vec()),
-                        None => {
-                            match layer.get(&p2) {
-                                // Inverse path
-                                Some(mouth) => mouth
-                                    .get(&p1)
-                                    .map(|path| path.clone().into_iter().rev().collect()),
-                                None => None,
-                            }
-                        }
-                    }
-                }
-                None => None,
-            }
-        }
-
-        pub fn insert(&mut self, floor: &str, p1: usize, p2: usize, path: Vec<usize>) {
-            match self.data.get_mut(floor) {
-                Some(layer) => {
-                    match layer.get_mut(&p1) {
-                        // Forward order
-                        Some(outer) => {
-                            match outer.get(&p2) {
-                                Some(_) => {
-                                    // Already exists this path (is overwritted)
-                                    outer.insert(p2, path);
-                                }
-                                None => {
-                                    outer.insert(p2, path);
-                                }
-                            }
-                        }
-                        None => match layer.get_mut(&p2) {
-                            // Backwards order
-                            Some(inner) => {
-                                let rev_path: Vec<usize> = path.into_iter().rev().collect();
-
-                                inner.insert(p1, rev_path);
-                            }
-                            None => {
-                                // It is not present, forward order by default
-                                let inner: HashMap<usize, Vec<usize>> = HashMap::from([(p2, path)]);
-
-                                layer.insert(p1, inner);
-                            }
-                        },
-                    }
-                }
-                None => {
-                    let inner: HashMap<usize, Vec<usize>> = HashMap::from([(p2, path)]);
-                    let outer: HashMap<usize, HashMap<usize, Vec<usize>>> =
-                        HashMap::from([(p1, inner)]);
-
-                    self.data.insert(floor.to_string(), outer);
-                }
-            }
-        }
-
-        pub fn new() -> DualHashMap {
-            let data: HashMap<String, HashMap<usize, HashMap<usize, Vec<usize>>>> = HashMap::new();
-
-            DualHashMap { data }
-        }
-
-        // pub fn save(&self, path: String) {
-        //     let file = BufWriter::new(File::create(path).unwrap());
-
-        //     serialize_into(file, self).expect("[ERROR] Cannot write data");
-        // }
     }
 }
