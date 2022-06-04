@@ -44,9 +44,9 @@ num_agents = 32000
 num_counters = 3
 
 [venue_tags]
-gates_info = "resources/627/tagging/gates.csv"
-mouths_info = "resources/627/tagging/mouths.csv"
-arrivals_info_csv = "resources/627/tagging/arrivals.csv"
+gates_info = "resources/tagging/gates.csv"
+mouths_info = "resources/tagging/mouths.csv"
+arrivals_info_csv = "resources/tagging/arrivals.csv"
 
 [match_timings]
 match_start = -90.0
@@ -54,16 +54,16 @@ seconds_per_step = 0.3
 distribute_agents_along_minutes = true
 
 [topology]
-layout_pb = "resources/627/maps/EA_PB_pandora_627px.png"
-layout_p05 = "resources/627/maps/EA_P0-5_pandora_627px.png"
-layout_p1 = "resources/627/maps/EA_P1_pandora_627px.png"
-layout_p15 = "resources/627/maps/EA_P1-5_pandora_627px.png"
-layout_p2 = "resources/627/maps/EA_P2_pandora_627px.png"
-layout_p3 = "resources/627/maps/EA_P3_pandora_627px.png"
-layout_p35 = "resources/627/maps/EA_P3-5_pandora_627px.png"
-layout_p4 = "resources/627/maps/EA_P4_pandora_627px.png"
-layout_p5 = "resources/627/maps/EA_P5_pandora_627px.png"
-layout_s1 = "resources/627/maps/EA_S1_pandora_627px.png"
+layout_pb = "resources/maps/EA_PB_pandora_627px.png"
+layout_p05 = "resources/maps/EA_P0-5_pandora_627px.png"
+layout_p1 = "resources/maps/EA_P1_pandora_627px.png"
+layout_p15 = "resources/maps/EA_P1-5_pandora_627px.png"
+layout_p2 = "resources/maps/EA_P2_pandora_627px.png"
+layout_p3 = "resources/maps/EA_P3_pandora_627px.png"
+layout_p35 = "resources/maps/EA_P3-5_pandora_627px.png"
+layout_p4 = "resources/maps/EA_P4_pandora_627px.png"
+layout_p5 = "resources/maps/EA_P5_pandora_627px.png"
+layout_s1 = "resources/maps/EA_S1_pandora_627px.png"
 
 [agent_data]
 min_vision = 1

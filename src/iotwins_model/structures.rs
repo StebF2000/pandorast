@@ -2,13 +2,33 @@ use crate::engine::matrix::{Matrix, Position};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
+    hash::{Hash, Hasher},
     iter::zip,
 };
 
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone)]
+use rayon::prelude::*;
+
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Default)]
 pub struct Structure {
     pub position: Position,
     pub location: Vec<usize>,
+}
+
+impl Structure {
+    /// CAUTION: This function computes a^2 + b^2
+    fn distance(&self, other: &Structure) -> i32 {
+        self.position.distance(&other.position)
+    }
+
+    pub fn get_closest_structure(&self, search_space: &[Structure]) -> Option<Structure> {
+
+        // Returns the closest structure, computing euclidean distance in parallel between them all
+        search_space
+            .par_iter()
+            .map(|structure| (structure.to_owned(), self.distance(structure)))
+            .min_by_key(|(_, distance)| *distance)
+            .map(|(structure, _)| structure)
+    }
 }
 
 pub fn generate_structures(ground_truth: &Matrix<u8>) -> HashMap<u8, HashSet<Structure>> {
@@ -17,12 +37,9 @@ pub fn generate_structures(ground_truth: &Matrix<u8>) -> HashMap<u8, HashSet<Str
     // let mut elevators: Vec<Vec<usize>> = Vec::new();
     let mut up_stairs: Vec<Vec<usize>> = Vec::new();
     let mut down_stairs: Vec<Vec<usize>> = Vec::new();
-    // let mut elevators: Vec<Vec<usize>> = Vec::new();
 
-    // let mut elevators_pos: Vec<Position> = Vec::new();
     let mut up_stairs_pos: Vec<Position> = Vec::new();
     let mut down_stairs_pos: Vec<Position> = Vec::new();
-    // let mut elevators_pos: Vec<Position> = Vec::new();
 
     for (idx, value) in ground_truth.data.iter().enumerate() {
         // Skip already visited locations and useless positions
@@ -35,20 +52,16 @@ pub fn generate_structures(ground_truth: &Matrix<u8>) -> HashMap<u8, HashSet<Str
         match value {
             // Down-stairs
             10 => {
-                down_stairs_pos.push(Position::middle_location(&facility));
+                down_stairs_pos.push(Position::middle_location(&facility, ground_truth.n_rows));
                 down_stairs.push(facility);
             }
-            // UP-stairs
+            // Up-stairs
             11 => {
-                up_stairs_pos.push(Position::middle_location(&facility));
+                up_stairs_pos.push(Position::middle_location(&facility, ground_truth.n_rows));
                 up_stairs.push(facility);
             }
-            // Elevators
-            // 3 => {
-            //     elevators_pos.push(Position::middle_location(&facility));
-            //     elevators.push(facility);
-            // }
-            _ => {}
+
+            _ => (),
         }
     }
 
@@ -61,10 +74,6 @@ pub fn generate_structures(ground_truth: &Matrix<u8>) -> HashMap<u8, HashSet<Str
     let up_stair: HashSet<Structure> = HashSet::from_iter(
         zip(up_stairs, up_stairs_pos).map(|(location, position)| Structure { position, location }),
     );
-
-    // let elevator: HashSet<Structure> = HashSet::from_iter(
-    //     zip(elevators, elevators_pos).map(|(location, position)| Structure { position, location }),
-    // );
 
     // Reduce size as much as posible
     let mut relation = HashMap::from([(10, down_stair), (11, up_stair)]);
@@ -81,10 +90,10 @@ struct RawMouth {
     y: usize,
 }
 
-pub fn load_mouths(layer: &String) -> HashMap<u16, Structure> {
+pub fn load_mouths(layer: &str) -> HashMap<u16, Structure> {
     let mut mouths: HashMap<u16, Vec<usize>> = HashMap::new();
 
-    let mut reader = csv::Reader::from_path("resources/627/tagging/mouths.csv")
+    let mut reader = csv::Reader::from_path("resources/tagging/mouths.csv")
         .expect("[ERROR] Mouths file not found");
 
     for result in reader.deserialize() {
@@ -114,7 +123,7 @@ pub fn load_mouths(layer: &String) -> HashMap<u16, Structure> {
         (
             id,
             Structure {
-                position: Position::middle_location(&location),
+                position: Position::middle_location(&location, 627),
                 location: location.to_vec(),
             },
         )
@@ -134,11 +143,40 @@ struct RawGate {
     y: usize,
 }
 
+#[derive(Eq, Clone, Serialize, Deserialize)]
+pub struct Gate {
+    pub floor: String,
+    pub name: String,
+    pub structure: Structure,
+}
+
+impl PartialEq for Gate {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Hash for Gate {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl Default for Gate {
+    fn default() -> Self {
+        Gate {
+            floor: String::from(""),
+            name: String::from(""),
+            structure: Default::default(),
+        }
+    }
+}
+
 /// HashMap of initial points (Gates). Key => usize position on matrix PB
-pub fn load_gates() -> HashMap<String, HashMap<String, Structure>> {
+pub fn load_gates() -> HashSet<Gate> {
     let mut gates: HashMap<String, HashMap<String, Vec<usize>>> = HashMap::new();
 
-    let mut reader = csv::Reader::from_path("resources/627/tagging/gates.csv")
+    let mut reader = csv::Reader::from_path("resources/tagging/gates.csv")
         .expect("[ERROR] Gates file not found");
 
     // HashMap of initial points (Gates). Key => usize position on matrix PB
@@ -161,50 +199,42 @@ pub fn load_gates() -> HashMap<String, HashMap<String, Structure>> {
         }
     }
 
-    let mut data = HashMap::from_iter(gates.into_iter().map(|(layer, gates)| {
-        (
-            layer,
-            HashMap::from_iter(gates.into_iter().map(|(id, location)| {
-                (
-                    id,
-                    Structure {
-                        location: location.to_vec(),
-                        position: Position::middle_location(&location),
-                    },
-                )
-            })),
-        )
-    }));
+    let mut data = HashSet::new();
+
+    gates.iter().for_each(|(layer, gates)| {
+        gates.iter().for_each(|(id, location)| {
+            data.insert(Gate {
+                floor: layer.to_string(),
+                name: id.to_string(),
+                structure: Structure {
+                    position: Position::middle_location(location, 627),
+                    location: location.to_vec(),
+                },
+            });
+        });
+    });
 
     // Reduce size
     data.shrink_to_fit();
     data
 }
 
-// /// Returns all jumps inside the influence area
-// fn influence_area(&self, counterparts: &[Jump], area_size: f32) -> Vec<Jump> {
-//     counterparts
-//         .iter()
-//         .filter(|counter| self.position.distance(counter.position) < area_size)
-//         .map(|counter| counter.to_owned())
-//         .collect()
-// }
-
 fn find_structure(
     ground_truth: &Matrix<u8>,
     position: usize,
     visited: &mut HashSet<usize>,
 ) -> Vec<usize> {
-    let x = ground_truth.data[position];
+    let x = ground_truth.data[position]; // Structure identifier
 
     // This way there are no duplicate positions
     let mut facility: HashSet<usize> = HashSet::from([position]);
 
-    let mut surroundings: Vec<usize> = ground_truth.contiguous(position);
+    let mut surroundings: Vec<usize> = ground_truth.contiguous(position); // Contiguous returns the 8 surrounding positions
 
     while let Some(pos) = surroundings.pop() {
         // If same structure do not visit again
 
+        // Check for the same type of structure
         if ground_truth.data[pos] == x {
             visited.insert(pos);
             facility.insert(pos);

@@ -3,7 +3,7 @@
 {
 	"name": "PandoRust",
 	"build": {
-		"dockerfile": "Dockerfile",
+		"dockerfile": "Dockerfile"
 	},
 	"runArgs": [
 		"--privileged",
@@ -12,7 +12,7 @@
 		"seccomp=.devcontainer/config.json",
 		"--name=pandorast",
 		"--memory=32g",
-		"--cpus=20.000",
+		"--cpus=20.000"
 	],
 	// Set *default* container specific settings.json values on container create.
 	"settings": {
@@ -32,14 +32,11 @@
 	// Add the IDs of extensions you want installed when the container is created.
 	"extensions": [
 		"vadimcn.vscode-lldb",
-		"mutantdino.resourcemonitor",
 		"matklad.rust-analyzer",
 		"tamasfe.even-better-toml",
 		"serayuzgur.crates",
 		"docsmsft.docs-markdown",
 		"GitHub.vscode-pull-request-github",
-		"ms-python.python",
-		"ms-python.vscode-pylance",
 		"ms-azuretools.vscode-docker"
 	],
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.

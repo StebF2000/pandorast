@@ -9,21 +9,32 @@ use crate::{
     iotwins_model::structures::Structure,
 };
 #[inline(always)]
-pub fn find_route(gt: &Matrix<u8>, p1: &Structure, p2: &Structure) -> Route {
+pub fn find_route(gt: &Matrix<u8>, p1: &Structure, p2: &Structure) -> Option<Route> {
     let routes: Vec<Vec<usize>> = p1
         .location
         .par_iter()
-        .flat_map_iter(|p1| p2.location.iter().map(|p2| a_star(gt, *p1, *p2)))
+        .flat_map(|p1| p2.location.par_iter().filter_map(|p2| a_star(gt, *p1, *p2)))
         .collect();
 
-    Route {
-        origin: p1.clone(),
-        destination: p2.clone(),
-        paths: routes,
+    // Checks if routes is empty for not creating such struct
+    match routes
+        .iter()
+        .flatten()
+        .copied()
+        .into_iter()
+        .next()
+        .is_none()
+    {
+        true => None,
+        false => Some(Route {
+            origin: p1.to_owned(),
+            destination: p2.to_owned(),
+            paths: routes,
+        }),
     }
 }
 
-#[derive(Clone, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, Serialize, Deserialize, Default)]
 pub struct Route {
     pub origin: Structure,
     pub destination: Structure,
@@ -40,6 +51,7 @@ impl Hash for Route {
 impl PartialEq for Route {
     fn eq(&self, other: &Self) -> bool {
         self.origin == other.origin && self.destination == other.destination
+            || self.destination == other.origin && self.origin == other.destination
     }
 }
 
@@ -55,8 +67,8 @@ impl Route {
     // Route is reversed
     pub fn inverse(&self) -> Self {
         Route {
-            origin: self.destination.clone(),
-            destination: self.origin.clone(),
+            origin: self.destination.to_owned(),
+            destination: self.origin.to_owned(),
             paths: self
                 .paths
                 .iter()

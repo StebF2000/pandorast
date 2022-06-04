@@ -4,10 +4,19 @@ pub mod matrix {
     use std::collections::HashMap;
     use std::hash::{Hash, Hasher};
 
-    #[derive(Clone)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub struct Matrix<T> {
         pub data: Vec<T>,
         pub n_rows: usize, // For position purposes
+    }
+
+    impl Default for Matrix<u8> {
+        fn default() -> Self {
+            Matrix {
+                data: vec![],
+                n_rows: 0,
+            }
+        }
     }
 
     impl Matrix<u8> {
@@ -103,8 +112,6 @@ pub mod matrix {
                 .unwrap()
                 .to_luma8();
 
-            image.save("test.png").expect("");
-
             Matrix {
                 data: image.as_raw().to_vec(),
                 n_rows: image.height() as usize,
@@ -112,7 +119,7 @@ pub mod matrix {
         }
     }
 
-    #[derive(Clone, Copy, Eq, Serialize, Deserialize)]
+    #[derive(Clone, Copy, Eq, Serialize, Deserialize, Default)]
     pub struct Position {
         pub x: usize,
         pub y: usize,
@@ -132,10 +139,10 @@ pub mod matrix {
     }
 
     impl Position {
-        pub fn new(idx: usize) -> Position {
+        pub fn new(idx: usize, grid_size: usize) -> Position {
             Position {
-                x: (idx / 627),
-                y: (idx % 627),
+                x: (idx / grid_size),
+                y: (idx % grid_size),
             }
         }
 
@@ -162,8 +169,11 @@ pub mod matrix {
             }
         }
 
-        pub fn middle_location(data: &[usize]) -> Position {
-            let p: Vec<Position> = data.iter().map(|idx| Position::new(*idx)).collect();
+        pub fn middle_location(data: &[usize], grid_size: usize) -> Position {
+            let p: Vec<Position> = data
+                .iter()
+                .map(|idx| Position::new(*idx, grid_size))
+                .collect();
             Position::middle(&p)
         }
 
@@ -183,7 +193,7 @@ pub mod matrix {
         }
 
         #[inline(always)]
-        /// Euclidean distance
+        /// Euclidean distance without sqrt (a2 + b2)
         pub fn distance(&self, other: &Position) -> i32 {
             i32::pow(self.x as i32 - other.x as i32, 2)
                 + i32::pow(self.y as i32 - other.y as i32, 2)
@@ -201,7 +211,7 @@ pub mod path_finding {
 
     // A* algorithm form origin to destination, grid must be squared
     // origin and destination will be supposed to be in grid. Blueprint should be passed.
-    pub fn a_star(gt: &Matrix<u8>, origin: usize, destination: usize) -> Vec<usize> {
+    pub fn a_star(gt: &Matrix<u8>, origin: usize, destination: usize) -> Option<Vec<usize>> {
         // Generates  heuristic field (parallel way) the closer you get, the lower is the penalization (like gradient descend)
         let cost_function: Vec<u64> = gt
             .data
@@ -241,7 +251,7 @@ pub mod path_finding {
                 }
 
                 // Reveresed the reversed path, getting the good one
-                return path.into_iter().rev().collect();
+                return Some(path.into_iter().rev().collect());
             }
             // If cost is over current best, current_state is discarded
             if current_state.cost > dist[current_state.position] {
@@ -276,8 +286,8 @@ pub mod path_finding {
                 });
         }
 
-        // This is for Rust's compiler hapinness; a route will always be find, is an undirected graph
-        vec![]
+        // No route is found
+        None
     }
 
     // Basic heuristic function, derivate-like where as you get closer to the target, the cost reduces

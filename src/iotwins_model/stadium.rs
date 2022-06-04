@@ -1,51 +1,25 @@
 use crate::{
     engine::matrix::Matrix,
     iotwins_model::{
+        agent::Agent,
         routes::{find_route, Route},
         structures::{generate_structures, load_mouths, Structure},
     },
 };
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Deserialize)]
-struct Gate {
-    gate: String,
-    x: u32,
-    y: u32,
-}
-
-// HashMap of initial points (Gates). Key => usize position on matrix PB
-pub fn load_gates(path: String) -> HashMap<String, Vec<usize>> {
-    let mut gates: HashMap<String, Vec<usize>> = HashMap::new();
-
-    let mut reader = csv::Reader::from_path(path).expect("[ERROR] Gates file not found");
-
-    for result in reader.deserialize() {
-        let record: Gate = result.expect("[ERROR] Incorrect gate format");
-
-        match gates.get_mut(&record.gate) {
-            Some(gate) => {
-                gate.push((627 * record.x + record.y) as usize);
-            }
-            None => {
-                gates.insert(record.gate, vec![(627 * record.x + record.y) as usize]);
-            }
-        }
-    }
-
-    gates
-}
-
-#[derive(Clone)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Floor {
     pub ground_truth: Matrix<u8>,
     pub structures: HashMap<u8, HashSet<Structure>>, // Mapping Position -> matrix by type of structure
     pub structures_paths: HashSet<Route>,
     pub mouths: HashMap<u16, Structure>, // Agent destinations
     pub mouths_paths: HashMap<u16, HashSet<Route>>, // From down-stairs -> mouths (grandstands)
+    pub agents: Vec<Agent>,              // All agents in floor
+    pub agents_paths: HashMap<usize, Vec<usize>>, // Path to follow by every agent in layer (Only own agent modifies this, analytics)
 }
 
 impl Floor {
@@ -60,31 +34,74 @@ impl Floor {
             mouths,
             structures,
             ground_truth,
+            ..Default::default()
         }
     }
 
-    pub fn load_floor(
-        path: String,
-        name: String,
-        mouths_paths: HashMap<u16, HashSet<Route>>,
-        structures_paths: HashSet<Route>,
-    ) -> Floor {
-        let mouths = load_mouths(&name);
-        let ground_truth = Floor::ground_truth(&Matrix::load_layer(&path));
+    pub fn insert_agents(&mut self, agents: Vec<Agent>, current_locaton: Structure) {
+        // Get agents route
+        let route = match self
+            .structures
+            .get(&11)
+            .expect("")
+            .contains(&current_locaton)
+        {
+            // Towards another floor
+            true => self
+                .structures_paths
+                .get(&Route {
+                    origin: current_locaton.clone(),
+                    destination: agents[0].clone().target,
+                    ..Default::default()
+                })
+                .unwrap(),
+            // Towards mouth
+            false => {
+                let mouth_structure = self
+                    .mouths
+                    .get(&agents[0].clone().destination)
+                    .unwrap()
+                    .to_owned();
 
+                self.mouths_paths
+                    .get(&agents[0].clone().destination)
+                    .unwrap()
+                    .get(&Route {
+                        origin: current_locaton.clone(),
+                        destination: mouth_structure,
+                        ..Default::default()
+                    })
+                    .unwrap()
+            }
+        };
+
+        agents.into_iter().for_each(|agent| {
+            self.agents_paths.insert(agent.id, route.get_path());
+            self.agents.push(agent);
+        });
+    }
+
+    pub fn load_floor(
+        path: &str,
+        name: &str,
+        structures: HashMap<u8, HashSet<Structure>>,
+        structures_paths: HashSet<Route>,
+        mouths_paths: HashMap<u16, HashSet<Route>>,
+    ) -> Floor {
         Floor {
-            structures: generate_structures(&ground_truth),
-            ground_truth,
+            structures,
+            ground_truth: Floor::ground_truth(&Matrix::load_layer(path)),
             structures_paths,
-            mouths,
+            mouths: load_mouths(name),
             mouths_paths,
+            ..Default::default()
         }
     }
 
     fn stairs_paths(
         gt: &Matrix<u8>,
         structures: &HashMap<u8, HashSet<Structure>>,
-        layer: &String,
+        layer: &str,
     ) -> HashSet<Route> {
         let down = structures.get(&10).expect("");
         let up = structures.get(&11).expect("");
@@ -96,7 +113,7 @@ impl Floor {
 
         progress_bar.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner} {msg} {bar:10} {pos}/{len}")
+                .template("{msg} {bar:10} {pos}/{len}")
                 .progress_chars("#>#-"),
         );
         // End of progress bar
@@ -104,24 +121,20 @@ impl Floor {
         let stairs_paths = down
             .par_iter()
             .progress_with(progress_bar)
-            .flat_map(|p1| up.par_iter().map(|p2| find_route(gt, p1, p2)));
+            .flat_map(|p1| up.par_iter().filter_map(|p2| find_route(gt, p1, p2)));
 
-        let mut res = HashSet::from_par_iter(stairs_paths);
-        res.shrink_to_fit();
-
-        res
+        HashSet::from_par_iter(stairs_paths)
     }
 
+    // For each destination mouth, a set of possible routes from up-stairs
     fn mouth_paths(
         gt: &Matrix<u8>,
         structures: &HashMap<u8, HashSet<Structure>>,
         mouths: &HashMap<u16, Structure>,
-        layer: &String,
+        layer: &str,
     ) -> HashMap<u16, HashSet<Route>> {
         // Down stairs are the only positions from where you can go to the grandstands, agents will arrive at down-stairs
         let down = structures.get(&10).expect("");
-        // For each destination mouth, a set of possible routes from near stairs
-        let mut mouths_paths: HashMap<u16, HashSet<Route>> = HashMap::new();
 
         // Progress bar
         let progress_bar = ProgressBar::new(down.len().try_into().unwrap());
@@ -130,26 +143,24 @@ impl Floor {
 
         progress_bar.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner} {msg} {bar:10} {pos}/{len}")
+                .template("{msg} {bar:10} {pos}/{len}")
                 .progress_chars("#>#-"),
         );
         // End of progress bar
 
-        mouths
-            .iter()
+        let mouths_routes = mouths
+            .par_iter()
             .progress_with(progress_bar)
-            .for_each(|(id, mouth)| {
-                let mouth_routes: HashSet<Route> = HashSet::from_par_iter(
-                    down.par_iter().map(|stair| find_route(gt, stair, mouth)),
-                );
+            .map(|(id, mouth)| {
+                let mouth_routes = down
+                    .par_iter()
+                    .filter_map(|stair| find_route(gt, stair, mouth));
 
-                mouths_paths.insert(*id, mouth_routes);
+                (*id, HashSet::from_par_iter(mouth_routes))
             });
 
-        // Reduce size
-        mouths_paths.shrink_to_fit();
-
-        mouths_paths
+        // mouths_paths
+        HashMap::from_par_iter(mouths_routes)
     }
 
     pub fn ground_truth(blueprint: &Matrix<u8>) -> Matrix<u8> {
@@ -175,57 +186,5 @@ impl Floor {
                 (182, 3),  // Elevator
             ]),
         )
-    }
-}
-
-pub mod arrivals {
-    use std::collections::HashMap;
-
-    use serde::Deserialize;
-
-    #[derive(Deserialize)]
-    struct RawArrival {
-        index: usize,
-        gate: String,
-        mouth: u16,
-        minutes_to_game: i32,
-        agents: u8,
-    }
-
-    #[derive(Debug)]
-    pub struct Arrival {
-        gate: String,
-        mouth: u16,
-        agents: u8,
-    }
-
-    pub fn load_arrivals() -> HashMap<i32, Vec<Arrival>> {
-        let mut arrivals: HashMap<i32, Vec<Arrival>> = HashMap::new();
-
-        let mut reader = csv::Reader::from_path("resources/627/tagging/arrivals.csv")
-            .expect("[ERROR] Arrivals file not found");
-
-        for result in reader.deserialize() {
-            let record: RawArrival = result.expect("[ERROR] Incorrect gate format");
-
-            match arrivals.entry(record.minutes_to_game) {
-                std::collections::hash_map::Entry::Occupied(mut arrivals) => {
-                    arrivals.get_mut().push(Arrival {
-                        gate: record.gate,
-                        mouth: record.mouth,
-                        agents: record.agents,
-                    });
-                }
-                std::collections::hash_map::Entry::Vacant(arrivals) => {
-                    arrivals.insert(vec![Arrival {
-                        gate: record.gate,
-                        mouth: record.mouth,
-                        agents: record.agents,
-                    }]);
-                }
-            }
-        }
-
-        arrivals
     }
 }

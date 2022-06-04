@@ -1,59 +1,283 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::File,
+    fs::{read_dir, File, ReadDir},
+    io::{BufReader, BufWriter},
+    time::Instant,
 };
+
+use bincode::serialize_into;
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use rand::distributions::Uniform;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     config::configuration::Parameters,
     iotwins_model::{
-        routes::Route,
-        stadium,
-        stadium::arrivals::{load_arrivals, Arrival},
-        structures::{load_gates, Structure},
+        arrivals::{load_arrivals, Arrival},
+        routes::{find_route, Route},
+        stadium::{self, Floor},
+        structures::{load_gates, Gate, Structure},
     },
 };
 
+#[derive(Serialize, Deserialize)]
 pub struct World {
     pub building: HashMap<String, stadium::Floor>,
-    step: u64,
-    resolution: u8,
+    pub building_conexions: HashMap<String, HashMap<Structure, HashMap<String, Structure>>>,
+    step: u32,
+    agent_count: usize,
     pub arrivals: HashMap<i32, Vec<Arrival>>,
-    gates: HashMap<String, HashMap<String, Structure>>,
+    pub gates: HashSet<Gate>,
+    pub gates_to_stairs: HashMap<Gate, HashSet<Route>>,
+    pub gates_to_mouths: HashMap<Gate, HashMap<u16, Route>>,
 }
 
 impl World {
+    // Returns closest structure with exit to the desired layer
+    pub fn get_closest_conexion(
+        &self,
+        origen: &Structure,
+        floor: &String,
+        destination_floor: &String,
+    ) -> Option<Structure> {
+        let level = self.building_conexions.get(floor).expect("");
+
+        // Get only stairs connecting to destination_floor
+        let search_space: Vec<Structure> = level
+            .iter()
+            .filter_map(
+                |(structure, conexions)| match conexions.contains_key(destination_floor) {
+                    true => Some(structure.to_owned()),
+                    false => None,
+                },
+            )
+            .collect();
+
+        // Return closest structure
+        origen.get_closest_structure(&search_space)
+    }
+
+    pub fn evolve(&mut self, interest: Uniform<f32>) {
+        self.step += 1;
+
+        let time = self.get_time(); // Return real
+
+        // 1. Insert new agents into the simulation
+        // 1.1 Check if agents should be inserted
+        match self.arrivals.to_owned().get(&time) {
+            // 1.2 Consume arrival
+            Some(arrivals) => {
+                arrivals.iter().for_each(|arrival| {
+                    let n_agents = arrival.agents;
+
+                    // This serves the purpose of looking for the right object already stored
+                    match self.gates.get(&Gate {
+                        name: arrival.gate.to_string(),
+                        ..Default::default()
+                    }) {
+                        // Generate new agents
+                        Some(origen) => {
+                            match self.get_closest_conexion(
+                                &origen.structure,
+                                &origen.floor,
+                                &arrival.mouth_layer(),
+                            ) {
+                                Some(target) => {
+                                    let agents = arrival.generate_agents(
+                                        &target,
+                                        self.agent_count,
+                                        interest,
+                                    );
+                                    // 1.3 Insert agents into simulation
+                                    let floor =
+                                        self.building.get_mut(&arrival.gate_layer()).unwrap();
+
+                                    floor.insert_agents(agents, origen.structure.clone());
+                                    println!("[INFO] MIN: {time} -> {n_agents} inserted");
+                                }
+                                None => {}
+                            }
+                        }
+                        None => {}
+                    }
+                });
+            }
+            None => {}
+        }
+    }
+
     pub fn save_structures(&self) {
+        println!("[INFO] Saving structures...");
         let mut data = HashMap::new();
 
         for (layer, floor) in &self.building {
-            data.insert(layer.to_string(), floor.structures.clone());
+            data.insert(layer.to_string(), floor.structures.to_owned());
         }
 
-        let file = File::create("resources/627/map_jumps.json").expect("");
-
-        serde_json::to_writer(file, &data).expect("");
+        let file1 = File::create("resources/stairs.json").expect(""); // All structures by layer
+        serde_json::to_writer_pretty(file1, &data).expect("");
     }
 
-    pub fn save_paths(&self) {
-        let mut stairs_paths = HashMap::new();
-        let mut mouths_paths = HashMap::new();
+    pub fn save_layer_paths(&self) {
+        println!("[INFO] Saving paths...");
 
+        // All routes in layer
         for (layer, floor) in &self.building {
-            stairs_paths.insert(layer.to_string(), floor.structures_paths.clone());
-            mouths_paths.insert(layer.to_string(), floor.mouths_paths.clone());
+            let file1 = File::create(format!("resources/stairs_paths/{layer}.json")).expect("");
+            let file2 = File::create(format!("resources/mouths_paths/{layer}.json")).expect("");
+
+            let data1: Vec<Route> = floor.structures_paths.iter().cloned().collect();
+
+            serde_json::to_writer_pretty(file1, &data1).expect("");
+            serde_json::to_writer_pretty(file2, &floor.mouths_paths).expect("");
         }
-
-        let file1 = File::create("resources/627/stairs_paths.json").expect("");
-        let file2 = File::create("resources/627/mouths_paths.json").expect("");
-
-        serde_json::to_writer(file1, &stairs_paths).expect("");
-        serde_json::to_writer(file2, &mouths_paths).expect("");
     }
 
-    fn load_agents(&self) {
-        let time = (self.step * self.resolution as u64) as i32;
+    // HPC environment saving (Who cares about humans)
+    pub fn bincode_save(&self) {
+        // Save building completely
 
-        // let arrivals = self.arrivals
+        let mut file = BufWriter::new(File::create("IoTwins.bin").unwrap());
+
+        serialize_into(&mut file, &self).unwrap();
+    }
+
+    // Paths between gates and stairs in layer
+    fn gates_stairs(
+        building: &HashMap<String, stadium::Floor>,
+        gates: &HashSet<Gate>,
+    ) -> HashMap<Gate, HashSet<Route>> {
+        // Progress bar
+        let progress_bar = ProgressBar::new(gates.len().try_into().unwrap());
+
+        progress_bar.set_message("Gate -> Stairs".to_string());
+
+        progress_bar.set_style(
+            ProgressStyle::default_spinner()
+                .template("{msg} {bar:10} {pos}/{len}")
+                .progress_chars("#>#-"),
+        );
+        // End of progress bar
+
+        let routes = gates.iter().progress_with(progress_bar).map(|gate| {
+            let floor = building.get(&gate.floor).expect("");
+            let up_stairs = floor.structures.get(&11).expect("");
+
+            let stairs_paths = up_stairs
+                .par_iter()
+                .filter_map(|p2| find_route(&floor.ground_truth, &gate.structure, p2));
+
+            (gate.to_owned(), HashSet::from_par_iter(stairs_paths))
+        });
+
+        HashMap::from_iter(routes)
+    }
+
+    // Paths between gates and up-stairs in layer
+    fn gates_mouths(
+        building: &HashMap<String, stadium::Floor>,
+        gates: &HashSet<Gate>,
+    ) -> HashMap<Gate, HashMap<u16, Route>> {
+        // Progress bar
+        let progress_bar = ProgressBar::new(gates.len().try_into().unwrap());
+
+        progress_bar.set_message("Gate -> Mouths".to_string());
+
+        progress_bar.set_style(
+            ProgressStyle::default_spinner()
+                .template("{msg} {bar:10} {pos}/{len}")
+                .progress_chars("#>#-"),
+        );
+        // End of progress bar
+
+        let routes = gates.iter().map(|gate| {
+            let floor = building.get(&gate.floor).expect("");
+
+            let gate_routes = floor.mouths.par_iter().filter_map(|(id, mouth)| {
+                find_route(&floor.ground_truth, &gate.structure, mouth).map(|route| (*id, route))
+            });
+
+            (gate.to_owned(), HashMap::from_par_iter(gate_routes))
+        });
+
+        HashMap::from_iter(routes)
+    }
+
+    // Get real time from step (initial time is -90 minutes to match start)
+    #[inline(always)]
+    fn get_time(&self) -> i32 {
+        (0.15 * self.step as f32) as i32 - 90_i32
+    }
+
+    // For each structure in floor gets their destination (Links stairs between layers). Generates proper global structure between them all
+    fn connect_structures(
+        building: &HashMap<String, stadium::Floor>,
+    ) -> HashMap<String, HashMap<Structure, HashMap<String, Structure>>> {
+        let conexions = building.iter().map(|(layer, floor)| {
+            let up_structures = floor.structures.get(&11).expect("");
+
+            // Progress bar
+            let progress_bar = ProgressBar::new(up_structures.len().try_into().unwrap());
+
+            progress_bar.set_message(format!("{layer} - Up stairs"));
+
+            progress_bar.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner} {msg} {bar:10} {pos}/{len}")
+                    .progress_chars("#>#-"),
+            );
+
+            let layer_stairs = up_structures
+                .iter()
+                .progress_with(progress_bar)
+                .map(|structure| {
+                    let structure_exits = building
+                        .par_iter()
+                        .filter(|(l, _)| l.to_string() != *layer) // Remove current floor
+                        .filter_map(|(destination_layer, destination_floor)| {
+                            let search_space = destination_floor.structures.get(&10).expect("");
+
+                            structure
+                                .get_closest_structure(&Vec::from_iter(search_space.to_owned()))
+                                .map(|structure| (destination_layer.to_string(), structure))
+                        });
+
+                    (
+                        structure.to_owned(),
+                        HashMap::from_par_iter(structure_exits),
+                    )
+                });
+
+            (layer.to_string(), HashMap::from_iter(layer_stairs))
+        });
+
+        HashMap::from_iter(conexions)
+    }
+
+    /// Method for floor loading
+    fn get_floor_file(dir: ReadDir, layer: &str) -> String {
+        let p: Vec<String> = dir
+            .into_iter()
+            .filter_map(|file_path| {
+                match file_path
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_str()
+                    .unwrap()
+                    .to_owned()
+                    .split('.')
+                    .collect::<Vec<&str>>()[0]
+                    == layer
+                {
+                    true => Some(file_path.unwrap().path().to_str().unwrap().to_owned()),
+                    false => None,
+                }
+            })
+            .collect();
+
+        p[0].to_owned()
     }
 }
 
@@ -63,6 +287,7 @@ pub fn create_world(configuration: Parameters) -> World {
     let mut building: HashMap<String, stadium::Floor> = HashMap::new();
 
     println!("[INFO] Creating world");
+    let start = Instant::now();
 
     floors.into_iter().for_each(|(floor, path)| {
         let layer = stadium::Floor::create_floor(path.to_string(), floor.to_string());
@@ -70,57 +295,85 @@ pub fn create_world(configuration: Parameters) -> World {
         building.insert(floor.to_string(), layer);
     });
 
-    World {
+    let w = World {
         step: 0,
-        resolution: 15, // Seconds
+        agent_count: 0,
+        building_conexions: World::connect_structures(&building),
+        gates: load_gates(),
+        gates_to_stairs: World::gates_stairs(&building, &load_gates()),
+        gates_to_mouths: World::gates_mouths(&building, &load_gates()),
         arrivals: load_arrivals(),
         building,
-        gates: load_gates(),
-    }
+    };
+
+    println!("[INFO] Environment created [{:?}]", start.elapsed());
+
+    w
 }
 
 pub fn load_world(
     structures_path: String,
-    mouths_paths_path: String,
-    structures_paths_path: String,
-    configuration: Parameters,
+    structures_paths_dir: String,
+    mouths_paths_dir: String,
+    configuration: &Parameters,
 ) -> World {
     println!("[INFO] Loading world...");
 
-    let mut building: HashMap<String, stadium::Floor> = HashMap::new();
-
-    // Load pre-computed stuff (routes and structures)
-    let structures_file = File::open(structures_path).expect("");
-    let mouths_paths_file = File::open(mouths_paths_path).expect("");
-    let structures_paths_file = File::open(structures_paths_path).expect("");
-
-    let structures: HashMap<String, HashMap<u8, HashSet<Structure>>> =
-        serde_json::from_reader(structures_file).expect("");
-
-    let mouths_paths: HashMap<String, HashMap<u16, HashSet<Route>>> =
-        serde_json::from_reader(mouths_paths_file).expect("");
-
-    let structures_paths: HashMap<String, HashSet<Route>> =
-        serde_json::from_reader(structures_paths_file).expect("");
+    // Use configuration to load in parallel the floors for the building.
 
     let floors = configuration.topology.layers();
 
-    floors.into_iter().for_each(|(floor, path)| {
-        let layer = stadium::Floor::load_floor(
-            path.to_string(),
-            floor.to_string(),
-            mouths_paths.get(&floor.to_string()).expect("").clone(),
-            structures_paths.get(&floor.to_string()).expect("").clone(),
+    let structures_reader = File::open(structures_path).unwrap();
+    let structures: HashMap<String, HashMap<u8, HashSet<Structure>>> =
+        serde_json::from_reader(BufReader::new(structures_reader)).unwrap();
+
+    let start = Instant::now();
+
+    // Load data in parallel
+    let building_raw = floors.into_par_iter().map(|(floor, path)| {
+        // Get correct layer file
+        let structures_path =
+            World::get_floor_file(read_dir(&structures_paths_dir).unwrap(), floor);
+        let mouths_path = World::get_floor_file(read_dir(&mouths_paths_dir).unwrap(), floor);
+
+        // Load data
+        let floor_structures = structures.get(floor).unwrap().to_owned();
+        let floor_structures_paths_raw: Vec<Route> =
+            serde_json::from_reader(BufReader::new(File::open(structures_path).unwrap())).unwrap(); // Convert to HashSet
+
+        let floor_structures_paths: HashSet<Route> = HashSet::from_iter(floor_structures_paths_raw);
+
+        let floor_mouths_paths: HashMap<u16, HashSet<Route>> =
+            serde_json::from_reader(BufReader::new(File::open(mouths_path).unwrap())).unwrap();
+
+        let layer = Floor::load_floor(
+            path,
+            floor,
+            floor_structures,
+            floor_structures_paths,
+            floor_mouths_paths,
         );
 
-        building.insert(floor.to_string(), layer);
+        (String::from(floor), layer)
     });
 
-    World {
+    let building = HashMap::from_par_iter(building_raw);
+
+    println!("[INFO] Camp Nou loaded [{:?}]", start.elapsed());
+
+    // Generate world
+    let w = World {
         step: 0,
-        resolution: 15, // Seconds
+        agent_count: 0,
         arrivals: load_arrivals(),
-        building,
         gates: load_gates(),
-    }
+        gates_to_mouths: World::gates_mouths(&building, &load_gates()),
+        gates_to_stairs: World::gates_stairs(&building, &load_gates()),
+        building_conexions: World::connect_structures(&building),
+        building,
+    };
+
+    println!("[INFO] Environment ready [{:?}]", start.elapsed());
+
+    w
 }

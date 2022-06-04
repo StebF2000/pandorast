@@ -1,8 +1,11 @@
+#![crate_name = "pandorast"]
+
 mod config;
 mod engine;
 
 mod iotwins_model {
     pub mod agent;
+    pub mod arrivals;
     pub mod config;
     pub mod routes;
     pub mod stadium;
@@ -12,8 +15,7 @@ mod iotwins_model {
 
 // Microsoft memory allocator for performance
 use mimalloc::MiMalloc;
-
-use crate::engine::matrix::Matrix;
+use rand::distributions::Uniform;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -23,22 +25,25 @@ fn main() {
 
     // Multithreading configuration
     rayon::ThreadPoolBuilder::new()
-        .num_threads(16)
+        .num_threads(20)
         .build_global()
         .unwrap();
 
     let configuration =
         config::configuration::Parameters::load_configuration(String::from("IoTwins_config.toml"));
 
-    // let world = iotwins_model::world::create_world(configuration);
+    let interest = Uniform::from(0_f32..1_f32);
 
-    // world.save_structures();
-    // world.save_paths();
+    let w = iotwins_model::world::create_world(configuration);
 
-    let w = iotwins_model::world::load_world(
-        "resources/627/map_jumps.json".to_string(),
-        "resources/627/mouths_paths.json".to_string(),
-        "resources/627/stairs_paths.json".to_string(),
-        configuration,
-    );
+    // let mut w = iotwins_model::world::load_world(
+    //     "resources/stairs.json".to_string(),
+    //     "resources/stairs_paths".to_string(),
+    //     "resources/mouths_paths".to_string(),
+    //     &configuration,
+    // );
+
+    w.bincode_save();
+
+    // w.evolve(interest);
 }
