@@ -347,7 +347,7 @@ pub fn load_world(
             serde_json::from_reader(BufReader::new(File::open(mouths_path).unwrap())).unwrap();
 
         let layer = Floor::load_floor(
-            path,
+            &path,
             floor,
             floor_structures,
             floor_structures_paths,

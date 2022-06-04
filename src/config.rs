@@ -1,6 +1,6 @@
 pub mod configuration {
 
-    use crate::iotwins_model::config;
+    use crate::iotwins_model::config as model;
     use serde::Deserialize;
     use std::{fs::File, io::Write};
 
@@ -38,11 +38,11 @@ pub mod configuration {
         input_data: Simulation,
 
         // Model-specific configuration
-        agent_data: config::model::AgentStats,
-        coefficients: config::model::Coeffs,
-        pub topology: config::model::Topology,
-        pub venue_tags: config::model::Venue,
-        match_timings: config::model::Match,
+        agent_data: model::AgentStats,
+        coefficients: model::Coeffs,
+        pub topology: model::Topology,
+        pub venue_tags: model::Venue,
+        match_timings: model::Match,
     }
 
     impl Parameters {
@@ -86,10 +86,10 @@ pub mod configuration {
                 .expect("[Error] Unable to write data");
         }
 
-        // Agent characteristics for simulation
-        pub fn get_agent_info(&self) -> config::model::AgentStats {
-            self.agent_data
-        }
+        // // Agent characteristics for simulation
+        // pub fn get_agent_info(&self) -> model::AgentStats {
+        //     self.agent_data
+        // }
 
         // // Agent randomization coefficients
         // pub fn get_agent_coeffs(&self) -> config::model::Coeffs {
