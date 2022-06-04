@@ -1,11 +1,10 @@
 pub mod configuration {
 
-    use crate::iotwins::model;
+    use crate::iotwins_model::config;
     use serde::Deserialize;
-    use std::fs::File;
-    use std::io::Write;
+    use std::{fs::File, io::Write};
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Deserialize)]
     struct Output {
         results_dir: String,
         results_file: String,
@@ -20,8 +19,8 @@ pub mod configuration {
 
     #[derive(Debug, Deserialize)]
     struct Size {
-        height: u64,
-        width: u64,
+        height: usize,
+        width: usize,
     }
 
     #[derive(Debug, Deserialize)]
@@ -30,7 +29,7 @@ pub mod configuration {
         num_counters: u32,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Deserialize)]
     pub struct Parameters {
         // General engine configuration
         output: Output,
@@ -39,15 +38,14 @@ pub mod configuration {
         input_data: Simulation,
 
         // Model-specific configuration
-        agent_data: model::AgentStats,
-        coefficients: model::Coeffs,
-        pub topology: model::Topology,
-        pub venue_tags: model::Venue,
-        match_timings: model::Match,
+        agent_data: config::model::AgentStats,
+        coefficients: config::model::Coeffs,
+        pub topology: config::model::Topology,
+        pub venue_tags: config::model::Venue,
+        match_timings: config::model::Match,
     }
 
     impl Parameters {
-
         // Returns configuration
         pub fn load_configuration(path: String) -> Parameters {
             // Open config file
@@ -64,7 +62,7 @@ pub mod configuration {
         }
 
         // Grid size for computation
-        pub fn get_world_size(&self) -> (u64, u64) {
+        pub fn get_world_size(&self) -> (usize, usize) {
             (self.size.height, self.size.width)
         }
 
@@ -89,19 +87,19 @@ pub mod configuration {
         }
 
         // Agent characteristics for simulation
-        pub fn get_agent_info(&self) -> model::AgentStats {
+        pub fn get_agent_info(&self) -> config::model::AgentStats {
             self.agent_data
         }
 
-        // Agent randomization coefficients
-        pub fn get_agent_coeffs(&self) -> model::Coeffs {
-            self.coefficients
-        }
+        // // Agent randomization coefficients
+        // pub fn get_agent_coeffs(&self) -> config::model::Coeffs {
+        //     self.coefficients
+        // }
 
-        // Match information for simulation
-        pub fn get_match_info(&self) -> model::Match {
-            self.match_timings
-        }
+        // // Match information for simulation
+        // pub fn get_match_info(&self) -> config::model::Match {
+        //     self.match_timings
+        // }
 
         // Total agents to be simulated
         pub fn total_agents(&self) -> u64 {
