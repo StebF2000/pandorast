@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use bincode::serialize_into;
+use bincode::{deserialize_from, serialize_into};
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use rand::distributions::Uniform;
 use rayon::prelude::*;
@@ -25,7 +25,7 @@ use crate::{
 pub struct World {
     pub building: HashMap<String, stadium::Floor>,
     pub building_conexions: HashMap<String, HashMap<Structure, HashMap<String, Structure>>>,
-    step: u32,
+    pub step: u32,
     agent_count: usize,
     pub arrivals: HashMap<i32, Vec<Arrival>>,
     pub gates: HashSet<Gate>,
@@ -59,52 +59,48 @@ impl World {
     }
 
     pub fn evolve(&mut self, interest: Uniform<f32>) {
-        self.step += 1;
+        // 0.3s per step, 200 steps make a minute. Load agent snippet
+        if self.step % 200 == 0 {
+            let mut total_agents = 0;
+            let mut total_arrivals = 0;
 
-        let time = self.get_time(); // Return real
+            let time: i32 = (self.step as i32 / 200) - 90;
 
-        // 1. Insert new agents into the simulation
-        // 1.1 Check if agents should be inserted
-        match self.arrivals.to_owned().get(&time) {
-            // 1.2 Consume arrival
-            Some(arrivals) => {
+            // 1. Insert new agents into the simulation
+            // 1.1 Check if agents should be inserted
+            if let Some(arrivals) = self.arrivals.to_owned().get(&time) {
                 arrivals.iter().for_each(|arrival| {
-                    let n_agents = arrival.agents;
-
-                    // This serves the purpose of looking for the right object already stored
-                    match self.gates.get(&Gate {
+                    // Discard un-simulated gates
+                    if let Some(origen) = self.gates.get(&Gate {
                         name: arrival.gate.to_string(),
                         ..Default::default()
                     }) {
-                        // Generate new agents
-                        Some(origen) => {
-                            match self.get_closest_conexion(
-                                &origen.structure,
-                                &origen.floor,
-                                &arrival.mouth_layer(),
-                            ) {
-                                Some(target) => {
-                                    let agents = arrival.generate_agents(
-                                        &target,
-                                        self.agent_count,
-                                        interest,
-                                    );
-                                    // 1.3 Insert agents into simulation
-                                    let floor =
-                                        self.building.get_mut(&arrival.gate_layer()).unwrap();
+                        // Gets agents' target structure
+                        if let Some(target) = self.get_closest_conexion(
+                            &origen.structure,
+                            &origen.floor,
+                            &arrival.mouth_layer(),
+                        ) {
+                            let agents =
+                                arrival.generate_agents(&target, self.agent_count, interest);
+                            // 1.3 Insert agents into simulation
+                            let floor = self.building.get_mut(&arrival.gate_layer()).unwrap();
 
-                                    floor.insert_agents(agents, origen.structure.clone());
-                                    println!("[INFO] MIN: {time} -> {n_agents} inserted");
-                                }
-                                None => {}
-                            }
+                            total_agents += agents.len();
+                            total_arrivals += 1;
+
+                            floor.insert_agents(agents, origen.structure.to_owned());
                         }
-                        None => {}
                     }
                 });
+
+                println!(
+                    "[SIM] MIN {time}: {total_arrivals} arrivals loaded ({total_agents} agents)"
+                );
             }
-            None => {}
         }
+
+        self.step += 1;
     }
 
     pub fn save_structures(&self) {
@@ -136,11 +132,14 @@ impl World {
 
     // HPC environment saving (Who cares about humans)
     pub fn bincode_save(&self) {
+        let start = Instant::now();
         // Save building completely
 
         let mut file = BufWriter::new(File::create("IoTwins.bin").unwrap());
 
         serialize_into(&mut file, &self).unwrap();
+
+        println!("[INFO] Time elapsed: {:?}", start.elapsed());
     }
 
     // Paths between gates and stairs in layer
@@ -202,12 +201,6 @@ impl World {
         });
 
         HashMap::from_iter(routes)
-    }
-
-    // Get real time from step (initial time is -90 minutes to match start)
-    #[inline(always)]
-    fn get_time(&self) -> i32 {
-        (0.15 * self.step as f32) as i32 - 90_i32
     }
 
     // For each structure in floor gets their destination (Links stairs between layers). Generates proper global structure between them all
@@ -290,7 +283,7 @@ pub fn create_world(configuration: Parameters) -> World {
     let start = Instant::now();
 
     floors.into_iter().for_each(|(floor, path)| {
-        let layer = stadium::Floor::create_floor(path.to_string(), floor.to_string());
+        let layer = stadium::Floor::create_floor(path, floor.to_string());
 
         building.insert(floor.to_string(), layer);
     });
@@ -374,6 +367,20 @@ pub fn load_world(
     };
 
     println!("[INFO] Environment ready [{:?}]", start.elapsed());
+
+    w
+}
+
+pub fn bincode_load(path: String) -> World {
+    println!("[INFO] Loading bincode version...");
+
+    let start = Instant::now();
+
+    let file = BufReader::new(File::open(path).unwrap());
+
+    let w = deserialize_from(file).unwrap();
+
+    println!("[INFO] Elapsed time: {:?}", start.elapsed());
 
     w
 }

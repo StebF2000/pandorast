@@ -39,46 +39,46 @@ impl Floor {
     }
 
     pub fn insert_agents(&mut self, agents: Vec<Agent>, current_locaton: Structure) {
-        // Get agents route
-        let route = match self
-            .structures
-            .get(&11)
-            .expect("")
-            .contains(&current_locaton)
-        {
-            // Towards another floor
-            true => self
-                .structures_paths
-                .get(&Route {
-                    origin: current_locaton.clone(),
-                    destination: agents[0].clone().target,
-                    ..Default::default()
-                })
-                .unwrap(),
-            // Towards mouth
-            false => {
-                let mouth_structure = self
-                    .mouths
-                    .get(&agents[0].clone().destination)
-                    .unwrap()
-                    .to_owned();
+        if agents.is_empty() {
+            return;
+        }
 
-                self.mouths_paths
-                    .get(&agents[0].clone().destination)
-                    .unwrap()
-                    .get(&Route {
-                        origin: current_locaton.clone(),
-                        destination: mouth_structure,
-                        ..Default::default()
-                    })
-                    .unwrap()
+        // Get one agent to find needed data
+        let origin = agents[0].to_owned();
+
+        // Destination of current route (target)
+        let agents_target = origin.target;
+
+        // Current target is an stair
+        if self.structures.get(&11).expect("").contains(&agents_target) {
+            // Get route current -> target and insert agents if exists
+            if let Some(route) = self.structures_paths.get(&Route {
+                origin: current_locaton,
+                destination: agents_target,
+                ..Default::default()
+            }) {
+                // Assign route to each agent & insert them into layer
+                let agents_routes = agents.iter().map(|agent| (agent.id, route.get_path()));
+
+                self.agents_paths.extend(agents_routes);
+                self.agents.extend(agents);
             }
-        };
+        } else if let Some(mouth) = self.mouths.get(&origin.destination) {
+            // Agent towards final destination (mouth) from stairs
+            if let Some(routes) = self.mouths_paths.get(&origin.destination) {
+                if let Some(route) = routes.get(&Route {
+                    origin: current_locaton,
+                    destination: mouth.to_owned(),
+                    ..Default::default()
+                }) {
+                    // Assign route to each agent & insert them into layer
+                    let agents_routes = agents.iter().map(|agent| (agent.id, route.get_path()));
 
-        agents.into_iter().for_each(|agent| {
-            self.agents_paths.insert(agent.id, route.get_path());
-            self.agents.push(agent);
-        });
+                    self.agents_paths.extend(agents_routes);
+                    self.agents.extend(agents);
+                }
+            }
+        }
     }
 
     pub fn load_floor(

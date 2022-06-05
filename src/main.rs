@@ -34,7 +34,7 @@ fn main() {
 
     let interest = Uniform::from(0_f32..1_f32);
 
-    let w = iotwins_model::world::create_world(configuration);
+    // let w = iotwins_model::world::create_world(configuration);
 
     // let mut w = iotwins_model::world::load_world(
     //     "resources/stairs.json".to_string(),
@@ -43,7 +43,11 @@ fn main() {
     //     &configuration,
     // );
 
-    w.bincode_save();
+    let mut w = iotwins_model::world::bincode_load(String::from("resources/IoTwins.bin"));
 
-    // w.evolve(interest);
+    // w.bincode_save();
+
+    while w.step < 30000 {
+        w.evolve(interest);
+    }
 }
