@@ -1,6 +1,9 @@
 use rand::prelude::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
+use std::{
+    collections::VecDeque,
+    hash::{Hash, Hasher},
+};
 
 use rayon::prelude::*;
 
@@ -57,11 +60,13 @@ impl PartialEq for Route {
 
 impl Route {
     // Returns a random path between the points for the agents -> O(1)
-    pub fn get_path(&self) -> Vec<usize> {
-        self.paths
-            .choose(&mut rand::thread_rng())
-            .expect("")
-            .to_vec()
+    pub fn get_path(&self) -> VecDeque<usize> {
+        VecDeque::from(
+            self.paths
+                .choose(&mut rand::thread_rng())
+                .expect("")
+                .to_vec(),
+        )
     }
 
     // Route is reversed

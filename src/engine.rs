@@ -119,7 +119,7 @@ pub mod matrix {
         }
     }
 
-    #[derive(Clone, Copy, Eq, Serialize, Deserialize, Default)]
+    #[derive(Clone, Copy, Eq, Serialize, Deserialize, Default, Debug)]
     pub struct Position {
         pub x: usize,
         pub y: usize,

@@ -3,23 +3,24 @@ use crate::{
     iotwins_model::{
         agent::Agent,
         routes::{find_route, Route},
+        snapshot::Data,
         structures::{generate_structures, load_mouths, Structure},
     },
 };
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Floor {
     pub ground_truth: Matrix<u8>,
-    pub structures: HashMap<u8, HashSet<Structure>>, // Mapping Position -> matrix by type of structure
+    pub structures: HashMap<u8, HashSet<Structure>>, // Mapping Position -> matrix by type of structure. MAYBE NOT NEEDED?
     pub structures_paths: HashSet<Route>,
     pub mouths: HashMap<u16, Structure>, // Agent destinations
     pub mouths_paths: HashMap<u16, HashSet<Route>>, // From down-stairs -> mouths (grandstands)
     pub agents: Vec<Agent>,              // All agents in floor
-    pub agents_paths: HashMap<usize, Vec<usize>>, // Path to follow by every agent in layer (Only own agent modifies this, analytics)
+    pub agents_paths: HashMap<usize, VecDeque<usize>>, // Path to follow by every agent in layer (Only own agent modifies this, analytics)
 }
 
 impl Floor {
@@ -38,47 +39,21 @@ impl Floor {
         }
     }
 
-    pub fn insert_agents(&mut self, agents: Vec<Agent>, current_locaton: Structure) {
-        if agents.is_empty() {
-            return;
-        }
+    pub fn insert_agents(
+        &mut self,
+        agents: &[Agent],
+        route: Route, // Agent arrival on gate
+    ) -> usize {
+        let agents_paths = agents.iter().map(|agent| (agent.id, route.get_path()));
 
-        // Get one agent to find needed data
-        let origin = agents[0].to_owned();
+        self.agents_paths.extend(agents_paths);
+        self.agents.extend(agents.to_vec());
 
-        // Destination of current route (target)
-        let agents_target = origin.target;
+        agents.len()
+    }
 
-        // Current target is an stair
-        if self.structures.get(&11).expect("").contains(&agents_target) {
-            // Get route current -> target and insert agents if exists
-            if let Some(route) = self.structures_paths.get(&Route {
-                origin: current_locaton,
-                destination: agents_target,
-                ..Default::default()
-            }) {
-                // Assign route to each agent & insert them into layer
-                let agents_routes = agents.iter().map(|agent| (agent.id, route.get_path()));
-
-                self.agents_paths.extend(agents_routes);
-                self.agents.extend(agents);
-            }
-        } else if let Some(mouth) = self.mouths.get(&origin.destination) {
-            // Agent towards final destination (mouth) from stairs
-            if let Some(routes) = self.mouths_paths.get(&origin.destination) {
-                if let Some(route) = routes.get(&Route {
-                    origin: current_locaton,
-                    destination: mouth.to_owned(),
-                    ..Default::default()
-                }) {
-                    // Assign route to each agent & insert them into layer
-                    let agents_routes = agents.iter().map(|agent| (agent.id, route.get_path()));
-
-                    self.agents_paths.extend(agents_routes);
-                    self.agents.extend(agents);
-                }
-            }
-        }
+    pub fn generate_save(&self) -> Data {
+        Data::new(self.agents.to_owned(), self.agents_paths.to_owned())
     }
 
     pub fn load_floor(

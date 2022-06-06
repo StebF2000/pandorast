@@ -23,12 +23,19 @@ pub struct Arrival {
 impl Arrival {
     pub fn generate_agents(
         &self,
-        target: &Structure,
+        target: Structure,
         id_counting: usize,
         interest: Uniform<f32>,
     ) -> Vec<Agent> {
-        (1..self.agents as usize)
-            .map(|counter| Agent::new(id_counting + counter, target, self.mouth, interest))
+        (0..self.agents as usize)
+            .map(|counter| {
+                Agent::new(
+                    id_counting + counter,
+                    target.to_owned(),
+                    self.mouth,
+                    interest,
+                )
+            })
             .collect()
     }
 

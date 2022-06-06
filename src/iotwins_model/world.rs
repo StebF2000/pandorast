@@ -16,6 +16,7 @@ use crate::{
     iotwins_model::{
         arrivals::{load_arrivals, Arrival},
         routes::{find_route, Route},
+        snapshot::Snapshot,
         stadium::{self, Floor},
         structures::{load_gates, Gate, Structure},
     },
@@ -26,7 +27,7 @@ pub struct World {
     pub building: HashMap<String, stadium::Floor>,
     pub building_conexions: HashMap<String, HashMap<Structure, HashMap<String, Structure>>>,
     pub step: u32,
-    agent_count: usize,
+    pub agent_count: usize,
     pub arrivals: HashMap<i32, Vec<Arrival>>,
     pub gates: HashSet<Gate>,
     pub gates_to_stairs: HashMap<Gate, HashSet<Route>>,
@@ -59,48 +60,91 @@ impl World {
     }
 
     pub fn evolve(&mut self, interest: Uniform<f32>) {
-        // 0.3s per step, 200 steps make a minute. Load agent snippet
+        // 0.3s per step, 200 steps make a minute. Agent arrival only executed once per minute
         if self.step % 200 == 0 {
-            let mut total_agents = 0;
-            let mut total_arrivals = 0;
+            let total_added = self.agent_arrival(interest); // Agent arrivals
+            self.snapshot().write_snapshot(); // Save snapshot
 
-            let time: i32 = (self.step as i32 / 200) - 90;
-
-            // 1. Insert new agents into the simulation
-            // 1.1 Check if agents should be inserted
-            if let Some(arrivals) = self.arrivals.to_owned().get(&time) {
-                arrivals.iter().for_each(|arrival| {
-                    // Discard un-simulated gates
-                    if let Some(origen) = self.gates.get(&Gate {
-                        name: arrival.gate.to_string(),
-                        ..Default::default()
-                    }) {
-                        // Gets agents' target structure
-                        if let Some(target) = self.get_closest_conexion(
-                            &origen.structure,
-                            &origen.floor,
-                            &arrival.mouth_layer(),
-                        ) {
-                            let agents =
-                                arrival.generate_agents(&target, self.agent_count, interest);
-                            // 1.3 Insert agents into simulation
-                            let floor = self.building.get_mut(&arrival.gate_layer()).unwrap();
-
-                            total_agents += agents.len();
-                            total_arrivals += 1;
-
-                            floor.insert_agents(agents, origen.structure.to_owned());
-                        }
-                    }
-                });
-
-                println!(
-                    "[SIM] MIN {time}: {total_arrivals} arrivals loaded ({total_agents} agents)"
-                );
-            }
+            println!(
+                "[SIM] T {}. Total agents: {} ({total_added} added)",
+                self.get_time(),
+                self.count_agents()
+            )
         }
 
         self.step += 1;
+    }
+
+    // Returns the number of agents added to the simulation env.
+    fn agent_arrival(&mut self, interest: Uniform<f32>) -> usize {
+        let time: i32 = self.get_time();
+        let mut total_added = 0;
+
+        // 1. Insert new agents into the simulation
+        // 1.1 Check if agents should be inserted
+        if let Some(arrivals) = self.arrivals.to_owned().get(&time) {
+            arrivals.iter().for_each(|arrival| {
+                if let Some(gate) = self.gates.to_owned().get(&Gate {
+                    name: arrival.gate.to_string(),
+                    ..Default::default()
+                }) {
+                    match self.get_closest_conexion(
+                        &gate.structure,
+                        &gate.floor,
+                        &arrival.mouth_layer(),
+                    ) {
+                        Some(target) => {
+                            // Remove non-listed gates
+                            let agents = arrival.generate_agents(
+                                target.to_owned(),
+                                self.agent_count,
+                                interest,
+                            );
+
+                            let floor = self.building.get_mut(&gate.floor).unwrap();
+                            // This include non-inserted agents
+                            self.agent_count += agents.len();
+
+                            // Insert agents on gate layer (floor)
+                            if let Some(route) =
+                                self.gates_to_mouths.get(gate).unwrap().get(&arrival.mouth)
+                            {
+                                // Destination mouth same layer than gate
+                                total_added += floor.insert_agents(&agents, route.to_owned());
+                            } else if let Some(route) =
+                                self.gates_to_stairs.get(gate).unwrap().get(&Route {
+                                    // Agent towards another layer
+                                    origin: gate.structure.to_owned(),
+                                    destination: target,
+                                    ..Default::default()
+                                })
+                            {
+                                total_added += floor.insert_agents(&agents, route.to_owned());
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            });
+        }
+
+        total_added
+    }
+
+    fn get_time(&mut self) -> i32 {
+        (self.step as i32 / 200) - 90
+    }
+
+    fn snapshot(&self) -> Snapshot {
+        let building = self
+            .building
+            .iter()
+            .map(|(layer, floor)| (layer.to_string(), floor.generate_save()));
+
+        Snapshot {
+            iter: self.step,
+            building: HashMap::from_iter(building),
+        }
     }
 
     pub fn save_structures(&self) {
@@ -135,7 +179,7 @@ impl World {
         let start = Instant::now();
         // Save building completely
 
-        let mut file = BufWriter::new(File::create("IoTwins.bin").unwrap());
+        let mut file = BufWriter::new(File::create("resources/IoTwins.bin").unwrap());
 
         serialize_into(&mut file, &self).unwrap();
 
@@ -201,6 +245,13 @@ impl World {
         });
 
         HashMap::from_iter(routes)
+    }
+
+    pub fn count_agents(&self) -> usize {
+        self.building
+            .iter()
+            .map(|(_, floor)| floor.agents.len())
+            .sum()
     }
 
     // For each structure in floor gets their destination (Links stairs between layers). Generates proper global structure between them all
@@ -283,7 +334,7 @@ pub fn create_world(configuration: Parameters) -> World {
     let start = Instant::now();
 
     floors.into_iter().for_each(|(floor, path)| {
-        let layer = stadium::Floor::create_floor(path, floor.to_string());
+        let mut layer = stadium::Floor::create_floor(path, floor.to_string());
 
         building.insert(floor.to_string(), layer);
     });

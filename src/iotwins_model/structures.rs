@@ -8,7 +8,7 @@ use std::{
 
 use rayon::prelude::*;
 
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Default, Debug)]
 pub struct Structure {
     pub position: Position,
     pub location: Vec<usize>,

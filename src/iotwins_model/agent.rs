@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::iotwins_model::structures::Structure;
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct Agent {
     pub id: usize,
     pub destination: u16,  // Final mouth
@@ -30,7 +30,12 @@ impl Hash for Agent {
 
 impl Agent {
     // Does not assign inmediate destination, only final target
-    pub fn new(id: usize, target: &Structure, destination: u16, between: Uniform<f32>) -> Agent {
+    pub fn new(
+        id: usize,
+        target: Structure,
+        destination: u16,
+        between: Uniform<f32>,
+    ) -> Agent {
         let mut rng = rand::thread_rng();
 
         Agent {

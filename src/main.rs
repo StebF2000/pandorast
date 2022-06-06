@@ -8,6 +8,7 @@ mod iotwins_model {
     pub mod arrivals;
     pub mod config;
     pub mod routes;
+    pub mod snapshot;
     pub mod stadium;
     pub mod structures;
     pub mod world;
@@ -16,6 +17,11 @@ mod iotwins_model {
 // Microsoft memory allocator for performance
 use mimalloc::MiMalloc;
 use rand::distributions::Uniform;
+
+use crate::{
+    engine::matrix::Position,
+    iotwins_model::{routes::Route, structures::Structure},
+};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -34,7 +40,8 @@ fn main() {
 
     let interest = Uniform::from(0_f32..1_f32);
 
-    // let w = iotwins_model::world::create_world(configuration);
+    // let mut w = iotwins_model::world::create_world(configuration);
+    // w.bincode_save();
 
     // let mut w = iotwins_model::world::load_world(
     //     "resources/stairs.json".to_string(),
@@ -45,9 +52,8 @@ fn main() {
 
     let mut w = iotwins_model::world::bincode_load(String::from("resources/IoTwins.bin"));
 
-    // w.bincode_save();
-
-    while w.step < 30000 {
+    // 0.3s per iteration -> total of 150 minutes
+    while w.step < 44000 {
         w.evolve(interest);
     }
 }
