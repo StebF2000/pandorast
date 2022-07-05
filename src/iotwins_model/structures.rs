@@ -8,10 +8,22 @@ use std::{
 
 use rayon::prelude::*;
 
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Eq, Clone, Default, Debug)]
 pub struct Structure {
     pub position: Position,
     pub location: Vec<usize>,
+}
+
+impl PartialEq for Structure {
+    fn eq(&self, other: &Self) -> bool {
+        self.position == other.position
+    }
+}
+
+impl Hash for Structure {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.position.hash(state);
+    }
 }
 
 impl Structure {
@@ -20,19 +32,19 @@ impl Structure {
         self.position.distance(&other.position)
     }
 
+    // Order search space from bigger to smaller distance, better for later pop
     pub fn get_closest_structure(&self, search_space: &[Structure]) -> Option<Structure> {
-
         // Returns the closest structure, computing euclidean distance in parallel between them all
         search_space
-            .par_iter()
-            .map(|structure| (structure.to_owned(), self.distance(structure)))
-            .min_by_key(|(_, distance)| *distance)
-            .map(|(structure, _)| structure)
+            .into_par_iter()
+            .map(|structure| (structure, self.distance(structure)))
+            .min_by_key(|(_, dist)| *dist)
+            .map(|(structure, _)| structure.to_owned())
     }
 }
 
 pub fn generate_structures(ground_truth: &Matrix<u8>) -> HashMap<u8, HashSet<Structure>> {
-    let mut visited = HashSet::with_capacity(ground_truth.n_rows);
+    let mut visited = HashSet::with_capacity(ground_truth.n_rows * ground_truth.n_rows);
 
     // let mut elevators: Vec<Vec<usize>> = Vec::new();
     let mut up_stairs: Vec<Vec<usize>> = Vec::new();

@@ -20,7 +20,8 @@ mimalloc = { version = "*", default-features = false }
 image = "*"
 csv = "*"
 rand = "*"
-dashmap = { version = "*", features = ["rayon", "send_guard"] }
+dashmap = { version = "*", features = ["rayon", "serde"] }
 indicatif = { version = "*", features = ["rayon", "improved_unicode"] }
 bincode = "*"
 serde_json = "*"
+lsd = "0.22.0"

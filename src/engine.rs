@@ -41,12 +41,12 @@ pub mod matrix {
         pub fn contiguous(&self, position: usize) -> Vec<usize> {
             let limit = self.n_rows;
 
-            let row_pos = position / limit;
-            let col_pos = position % limit;
+            let x = position / limit;
+            let y = position % limit;
 
-            match row_pos {
+            match x {
                 // First row
-                0 => match col_pos {
+                0 => match y {
                     // First column
                     0 => Vec::from([position + 1, position + limit, position + limit + 1]),
                     // Last column
@@ -60,7 +60,7 @@ pub mod matrix {
                     ]),
                 },
                 // Last row
-                626 => match col_pos {
+                626 => match y {
                     // First column
                     0 => Vec::from([position + 1, position - limit, position - limit + 1]),
                     // Last column
@@ -73,7 +73,7 @@ pub mod matrix {
                         position - limit + 1,
                     ]),
                 },
-                _ => match col_pos {
+                _ => match y {
                     // First column
                     0 => Vec::from([
                         position + 1,
@@ -141,31 +141,8 @@ pub mod matrix {
     impl Position {
         pub fn new(idx: usize, grid_size: usize) -> Position {
             Position {
-                x: (idx / grid_size),
-                y: (idx % grid_size),
-            }
-        }
-
-        pub fn closest(&self, others: Vec<Position>) -> Option<usize> {
-            if others.is_empty() {
-                return None;
-            }
-
-            let mut dist = i32::MAX;
-            let mut closest = 0;
-
-            others.into_iter().enumerate().for_each(|(idx, position)| {
-                let d = Position::distance(self, &position);
-
-                if d < dist {
-                    dist = d;
-                    closest = idx;
-                }
-            });
-            // 10 pixels of distance
-            match dist < 10_i32.pow(2) {
-                true => Some(closest),
-                false => None,
+                x: idx % grid_size,
+                y: idx / grid_size,
             }
         }
 
@@ -220,7 +197,7 @@ pub mod path_finding {
             .map(|(i, _)| path_finding::heuristic(i, gt.n_rows))
             .collect();
 
-        let mut dist: Vec<u64> = (0..cost_function.len()).map(|_| u64::MAX).collect(); // Initial cost (inf)
+        let mut dist: Vec<u64> = vec![u64::MAX; cost_function.len()]; // Initial cost (inf)
         let mut heap: BinaryHeap<State> = BinaryHeap::new();
 
         // Trackinkg State for each position in dist matrix
@@ -302,71 +279,62 @@ pub mod path_finding {
     }
 
     pub fn movements(position: usize, gt: &Matrix<u8>) -> Vec<usize> {
-        let row_pos = position / gt.n_rows;
-        let col_pos = position % gt.n_rows;
+        let x = position / gt.n_rows;
+        let y = position % gt.n_rows;
 
-        match row_pos {
+        match x {
             // First row
-            0 => {
-                match col_pos {
-                    // Last column item
-                    626 => Vec::from([position - 1, position + gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                    // First column item
-                    0 => Vec::from([position + 1, position + gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                    _ => Vec::from([position + 1, position - 1, position + gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                }
-            }
-            // Last row
-            626 => {
-                match col_pos {
-                    // Last column item
-                    626 => Vec::from([position - 1, position - gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                    // First column item
-                    0 => Vec::from([position + 1, position - gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                    _ => Vec::from([position + 1, position - 1, position - gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                }
-            }
-            _ => {
-                match col_pos {
-                    // Last column item
-                    626 => Vec::from([position - 1, position + gt.n_rows, position - gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                    // First column item
-                    0 => Vec::from([position + 1, position + gt.n_rows, position - gt.n_rows])
-                        .into_iter()
-                        .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
-                        .collect(),
-                    _ => Vec::from([
-                        position + 1,
-                        position - 1,
-                        position + gt.n_rows,
-                        position - gt.n_rows,
-                    ])
+            0 => match y {
+                // First column
+                0 => Vec::from([position + 1, position + gt.n_rows])
                     .into_iter()
-                    .filter(|pos| pos < &(gt.n_rows * gt.n_rows) && gt.data[*pos] != 1)
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
                     .collect(),
-                }
-            }
+                // Last column
+                626 => Vec::from([position - 1, position + gt.n_rows])
+                    .into_iter()
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                    .collect(),
+                _ => Vec::from([position - 1, position + 1, position + gt.n_rows])
+                    .into_iter()
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                    .collect(),
+            },
+            // Last row
+            626 => match y {
+                // First column
+                0 => Vec::from([position + 1, position - gt.n_rows])
+                    .into_iter()
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                    .collect(),
+                // Last column
+                626 => Vec::from([position - 1, position - gt.n_rows]),
+                _ => Vec::from([position - 1, position + 1, position - gt.n_rows])
+                    .into_iter()
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                    .collect(),
+            },
+            _ => match y {
+                // First column
+                0 => Vec::from([position + 1, position - gt.n_rows, position + gt.n_rows])
+                    .into_iter()
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                    .collect(),
+                // Last column
+                626 => Vec::from([position - 1, position - gt.n_rows, position + gt.n_rows])
+                    .into_iter()
+                    .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                    .collect(),
+                _ => Vec::from([
+                    position - 1,
+                    position + 1,
+                    position + gt.n_rows,
+                    position - gt.n_rows,
+                ])
+                .into_iter()
+                .filter(|pos| *pos < gt.n_rows * gt.n_rows && gt.data[*pos] != 1)
+                .collect(),
+            },
         }
     }
 
@@ -392,5 +360,84 @@ pub mod path_finding {
         fn partial_cmp(&self, other: &State) -> Option<Ordering> {
             Some(self.cmp(other))
         }
+    }
+}
+
+pub mod saving {
+    use std::{cmp::Ordering, collections::BinaryHeap};
+
+    use serde::{Deserialize, Serialize};
+
+    use crate::{engine::matrix::Position, iotwins_model::agent::Agent};
+
+    #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+    pub struct PathSegment {
+        init_step: u32,
+        path: Vec<usize>,
+        agent_id: usize,
+        layer: String,
+    }
+
+    // Stuff needed for correctly ordering bottom-to-top the segments
+    impl Ord for PathSegment {
+        fn cmp(&self, other: &Self) -> Ordering {
+            other
+                .layer
+                .cmp(&self.layer)
+                .then_with(|| self.layer.cmp(&other.layer))
+        }
+    }
+
+    impl PartialOrd for PathSegment {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl PathSegment {
+        pub fn new(agent: &Agent, path: Vec<usize>, layer: &str, current_step: u32) -> PathSegment {
+            PathSegment {
+                init_step: current_step - agent.steps as u32,
+                path,
+                agent_id: agent.id,
+                layer: layer.to_string(),
+            }
+        }
+
+        pub fn recreate_path(&self) -> Vec<(u32, usize)> {
+            self.path
+                .iter()
+                .enumerate()
+                .map(|(idx, s)| (self.init_step + (idx as u32), *s))
+                .collect()
+        }
+    }
+
+    // agent_id, x, y, step
+    pub fn generate_path(
+        id: usize,
+        path: &mut BinaryHeap<PathSegment>,
+        target_mouth: &u16,
+    ) -> Vec<Vec<String>> {
+        let mut global_path = Vec::new();
+
+        while let Some(segment) = path.pop() {
+            segment
+                .recreate_path()
+                .into_iter()
+                .for_each(|(step, position)| {
+                    let point = Position::new(position, 627);
+                    global_path.push(vec![
+                        format!("{id}"),
+                        format!("{}", point.x),
+                        format!("{}", point.y),
+                        format!("{}", segment.layer),
+                        format!("{step}"),
+                        format!("{target_mouth}"),
+                    ]);
+                });
+        }
+
+        global_path
     }
 }

@@ -6,7 +6,6 @@ use crate::iotwins_model::{agent::Agent, structures::Structure};
 
 #[derive(Deserialize)]
 struct RawArrival {
-    index: usize,
     gate: String,
     mouth: u16,
     minutes_to_game: i32,
@@ -25,7 +24,7 @@ impl Arrival {
         &self,
         target: Structure,
         id_counting: usize,
-        interest: Uniform<f32>,
+        interest: Uniform<f64>,
     ) -> Vec<Agent> {
         (0..self.agents as usize)
             .map(|counter| {
@@ -33,6 +32,7 @@ impl Arrival {
                     id_counting + counter,
                     target.to_owned(),
                     self.mouth,
+                    self.mouth_layer(),
                     interest,
                 )
             })
@@ -50,23 +50,25 @@ impl Arrival {
     }
 
     pub fn mouth_layer(&self) -> String {
-        if (100..153).contains(&self.mouth) {
+        if (100..154).contains(&self.mouth) {
             String::from("S1")
-        } else if (200..211).contains(&self.mouth) {
+        } else if (200..212).contains(&self.mouth) {
             String::from("PB")
-        } else if (212..222).contains(&self.mouth) || (240..250).contains(&self.mouth) {
+        } else if (212..223).contains(&self.mouth) || (240..251).contains(&self.mouth) {
             String::from("P0-5")
-        } else if (223..239).contains(&self.mouth)
-            || (300..325).contains(&self.mouth)
-            || (345..358).contains(&self.mouth)
+        } else if (223..240).contains(&self.mouth)
+            || (300..326).contains(&self.mouth)
+            || (345..359).contains(&self.mouth)
         {
             String::from("P1")
-        } else if (313..357).contains(&self.mouth) {
+        } else if (313..358).contains(&self.mouth) {
             String::from("P2")
-        } else if (414..456).contains(&self.mouth) {
+        } else if (414..457).contains(&self.mouth) {
             String::from("P3")
-        } else {
+        } else if (521..550).contains(&self.mouth) {
             String::from("P4")
+        } else {
+            String::from("")
         }
     }
 }
@@ -75,7 +77,7 @@ impl Arrival {
 pub fn load_arrivals() -> HashMap<i32, Vec<Arrival>> {
     let mut arrivals: HashMap<i32, Vec<Arrival>> = HashMap::new();
 
-    let mut reader = csv::Reader::from_path("resources/tagging/arrivals.csv")
+    let mut reader = csv::Reader::from_path("resources/tagging/BOCA_arrivals.csv")
         .expect("[ERROR] Arrivals file not found");
 
     for result in reader.deserialize() {
@@ -98,6 +100,8 @@ pub fn load_arrivals() -> HashMap<i32, Vec<Arrival>> {
             }
         }
     }
+
+    println!("[INFO] Arrivals loaded");
 
     arrivals
 }

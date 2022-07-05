@@ -8,11 +8,9 @@
 	"runArgs": [
 		"--privileged",
 		"--cap-add=SYS_PTRACE",
-		"--security-opt",
-		"seccomp=.devcontainer/config.json",
 		"--name=pandorast",
-		"--memory=32g",
-		"--cpus=20.000"
+		"--memory=90g",
+		"--cpus=30.000"
 	],
 	// Set *default* container specific settings.json values on container create.
 	"settings": {

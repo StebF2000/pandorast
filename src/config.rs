@@ -55,10 +55,10 @@ pub mod configuration {
             };
 
             // Deserialize config file into config struct
-            return match toml::from_str(&data) {
+            match toml::from_str(&data) {
                 Ok(file) => file,
                 Err(error) => panic!("Problem opening the file: {:?}", error),
-            };
+            }
         }
 
         // Grid size for computation
@@ -85,21 +85,6 @@ pub mod configuration {
             file.write_all(info.as_bytes())
                 .expect("[Error] Unable to write data");
         }
-
-        // // Agent characteristics for simulation
-        // pub fn get_agent_info(&self) -> model::AgentStats {
-        //     self.agent_data
-        // }
-
-        // // Agent randomization coefficients
-        // pub fn get_agent_coeffs(&self) -> config::model::Coeffs {
-        //     self.coefficients
-        // }
-
-        // // Match information for simulation
-        // pub fn get_match_info(&self) -> config::model::Match {
-        //     self.match_timings
-        // }
 
         // Total agents to be simulated
         pub fn total_agents(&self) -> u64 {
